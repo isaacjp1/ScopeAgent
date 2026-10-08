@@ -16,8 +16,6 @@ import io
 import re
 import time
 
-from playwright.async_api import async_playwright
-
 from . import config
 
 # Runs in one frame. Returns its text with every table rendered as pipe rows that carry their links, so the model
@@ -221,6 +219,9 @@ class Site:
 
     async def _start_once(self):
         try:
+            # Imported here: a missing or broken Playwright is then a caught startup failure like any other, and the
+            # logic tests can import this module without Playwright (same lazy pattern as pypdf in pdf_text).
+            from playwright.async_api import async_playwright
             t0 = time.time()
             self.pw = await async_playwright().start()
             self.browser = await self.pw.chromium.launch(
