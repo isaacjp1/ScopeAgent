@@ -14,6 +14,7 @@ from agent import clinic, config  # noqa: E402
 from agent.fast import DOC_TASK, NE_TASK, PHONE_OTHER, PHONE_TASK, WHO_REFERRED, dates_in  # noqa: E402
 from agent.memory import Memory  # noqa: E402
 from agent.rules import check_ne  # noqa: E402
+from agent.site import same_origin  # noqa: E402
 from agent.solver import Solver, plausible, run_python  # noqa: E402
 
 MSG = json.load(open(os.path.join(os.path.dirname(__file__), "..", "practice_items.json")))[0]["text"]
@@ -134,6 +135,17 @@ def main():
     assert res[0] == "skip" and "below confidence gate" in res[2]["why"], res
     assert gated({"conf": 0.9})[0] == "answer" and gated({"conf": 0.7})[0] == "answer"
     assert gated({})[0] == "skip"
+
+    # Rule 1, browser: same scheme, host and port as SITE_URL only; data:, blob: and about: never leave the box
+    config.SITE_URL = "http://site:8000"
+    assert same_origin("http://site:8000/patients?x=1")
+    assert same_origin("data:image/png;base64,AA")
+    assert same_origin("blob:x")
+    assert same_origin("about:blank")
+    assert not same_origin("https://fonts.googleapis.com/css")
+    assert not same_origin("http://site:80001/")
+    assert not same_origin("https://site:8000/")
+    assert not same_origin("http://site:8000.evil/")
     print("all logic checks passed")
 
 
