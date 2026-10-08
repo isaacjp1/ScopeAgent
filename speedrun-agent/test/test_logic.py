@@ -146,6 +146,8 @@ def main():
     assert not same_origin("http://site:80001/")
     assert not same_origin("https://site:8000/")
     assert not same_origin("http://site:8000.evil/")
+    config.SITE_URL = "https://Site.Example:443"   # the browser reports https://site.example/...
+    assert same_origin("https://site.example/x") and not same_origin("http://site.example/x")
     print("all logic checks passed")
 
 

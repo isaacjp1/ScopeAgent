@@ -113,7 +113,7 @@ def shell(s):
     tok = "%x" % random.getrandbits(48)
     return f"""<!doctype html><html><head><title>Wrenfield</title><style>#menu{{display:none}} #menu.open{{display:block}}
 iframe{{width:1200px;height:900px;border:0}}</style></head><body>
-<a href="#main">Skip to main content</a>
+<a href="#main">Skip to main content</a><img src="http://blocked.example/x.png" alt="">
 <nav><a href="/">Dashboard</a> <a href="/patients">Patients</a> <a href="/schedule">Schedule</a> <a href="/documents">Documents</a></nav>
 <header><div role="button" aria-haspopup="true" onclick="document.getElementById('menu').classList.toggle('open')">
 <span>Location</span><br><span>{label}</span></div>
