@@ -136,6 +136,7 @@ async def run():
 
 
 def main():
+    config.require_urls()
     try:
         asyncio.run(run())
     except KeyboardInterrupt:
