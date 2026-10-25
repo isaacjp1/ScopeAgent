@@ -333,6 +333,54 @@ def content(s, path):
 
 mw_content = mw.content
 mw.content = content
+
+# v27 synthesis: the scripted model answers the field-extraction and code-writing prompts of agent/synth.py
+import json  # noqa: E402
+import re  # noqa: E402
+import fake_synth_claim  # noqa: E402
+
+_post = mw.L.do_POST
+WRITES = []
+
+
+def _synth_post(self):
+    n = int(self.headers.get("Content-Length") or 0)
+    raw = self.rfile.read(n)
+    req = json.loads(raw)
+    first = req["messages"][0]["content"]
+    text = first if isinstance(first, str) else ""
+
+    def say(content):
+        b = json.dumps({"choices": [{"message": {"role": "assistant", "content": content}, "finish_reason": "stop"}],
+                        "usage": {"cost": 0.01}}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(b)))
+        self.end_headers()
+        self.wfile.write(b)
+
+    if text.startswith("Extract these fields"):
+        task = text.split("REQUEST:", 1)[1].split("\n\nReply", 1)[0].strip()
+        m = re.search(r"(?:claim:|for) ([A-Z][a-z]+),? ([A-Z][a-z]+)", task)
+        last, first_ = (m.group(1), m.group(2)) if m else (None, None)
+        if m and "," not in m.group(0):   # "for Linda Coleman"
+            last, first_ = first_, last
+        dob = re.search(r"(?:DOB|born) (\d{4}-\d{2}-\d{2})", task)
+        dos = re.search(r"service(?: date)? (\d{4}-\d{2}-\d{2})", task)
+        return say(json.dumps({"last_name": last, "first_name": first_, "dob": dob and dob.group(1),
+                               "service_date": dos and dos.group(1)}))
+    if text.startswith("A clinic sent a RULE"):
+        new = text.split("NEW MESSAGE:", 1)[1]
+        return say(json.dumps({"changes_rule": "days" in new or "not covered" in new}))
+    if text.startswith("You write Python code"):
+        WRITES.append(1)
+        code = fake_synth_claim.BROKEN if len(req["messages"]) == 1 else fake_synth_claim.GOOD
+        return say("```python\n" + code + "\n```")
+    self.rfile = __import__("io").BytesIO(raw)
+    return _post(self)
+
+
+mw.L.do_POST = _synth_post
 mw.ITEMS = ITEMS
 mw.PROVIDERS = [(i, n, sp, True) for i, n, sp in PROVIDERS]
 

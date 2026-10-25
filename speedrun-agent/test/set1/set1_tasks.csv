@@ -1,0 +1,225 @@
+id,kind,task,v11_result,v11_answer,v22_result,v22_answer,v22_seconds,v22_skip_reason
+i002,lab,"Does the Basic metabolic panel lab report for Anderson, Evelyn (DOB 1981-12-28), received on 2026-01-23, need a call to the provider, a nurse review, or release to the patient?",SKIP,,ANSWER,"CALL_PROVIDER_NOW:Calcium,Creatinine,Potassium",4.5,
+i003,lab,Please decide what to do with the Complete blood count lab report received on 2026-09-07 for Christopher Garrison.,SKIP,,SKIP,,11.0,time; final TimeoutError()
+i004,lab,Please decide what to do with the Basic metabolic panel lab report received on 2025-09-25 for Barbara Li.,SKIP,,SKIP,,8.7,time; final guess too unsure (0.0)
+i006,lab,"What happens to the Complete blood count lab report for Adam O'Brien (born 1989-09-06), received 2026-02-11?",SKIP,,SKIP,,10.8,llm TimeoutError(); final TimeoutError()
+i007,lab,"Does the Basic metabolic panel lab report for Hunter, Albert (DOB 1929-11-12), received on 2025-10-09, need a call to the provider, a nurse review, or release to the patient?",SKIP,,SKIP,,10.8,llm TimeoutError(); final TimeoutError()
+i008,lab,"Does the Complete blood count lab report for Vasquez, Desmond (DOB 2015-04-08), received on 2026-06-21, need a call to the provider, a nurse review, or release to the patient?",SKIP,,SKIP,,10.7,llm TimeoutError(); final TimeoutError()
+i009,lab,"Does the Complete blood count lab report for Wong, Austin (DOB 2002-10-11), received on 2025-03-04, need a call to the provider, a nurse review, or release to the patient?",SKIP,,ANSWER,RELEASE,5.9,
+i010,lab,Please decide what to do with the Complete blood count lab report received on 2026-09-30 for Teresa Murphy.,SKIP,,SKIP,,7.1,time; final guess too unsure (0.0)
+i011,phone,What phone number do we have on file for patient Abigail Price (born 1952-03-21)?,ANSWER,(620) 832-1153,SKIP,,10.2,time
+i012,phone,What phone number do we have on file for patient Sophia Smith (born 1954-03-03)?,ANSWER,(620) 595-3889,SKIP,,10.1,time
+i013,lab,"Next step for a lab report: Andres Salazar, Complete blood count, received 2025-01-02.",SKIP,,SKIP,,10.4,time; final TimeoutError()
+i014,lab,Please decide what to do with the Complete blood count lab report received on 2026-02-15 for Andrea Wright.,SKIP,,ANSWER,RELEASE,4.2,
+i015,lab,"Next step for a lab report: Billy Nguyen, Complete blood count, received 2025-07-05.",SKIP,,SKIP,,10.3,time; final TimeoutError()
+i017,phone,What phone number do we have on file for patient Andrea Shaw (born 1984-10-11)?,ANSWER,(620) 686-9022,ANSWER,(620) 686-9022,4.2,
+i018,lab,"Next step for a lab report: Matthew Wells, Basic metabolic panel, received 2025-11-20.",SKIP,,SKIP,,8.5,llm TimeoutError(); final guess too unsure (0.0)
+i019,invoice_owed,"What's still owed on invoice 83999703 (patient Henry Wong, service date 2026-03-02), in dollars? Still owed means the amount billed minus the payments received, and a voided invoice owes nothing.",SKIP,,SKIP,,8.2,time; final guess too unsure (0.0)
+i020,phone,What phone number do we have on file for patient Nicholas Brown (born 2024-10-09)?,ANSWER,(316) 959-1030,SKIP,,9.9,time
+i021,lab,"What happens to the Complete blood count lab report for Justin Taylor (born 2005-12-12), received 2026-09-30?",SKIP,,ANSWER,RELEASE,5.0,
+i022,provider_appt_count,"As of now, how many scheduled appointments does Amy Fuller, NP have on 2027-01-12 across all locations? Leave out appointments of patients whose record is a test record or has been deleted.",SKIP,,SKIP,,5.4,time (nothing read)
+i023,lab,"What happens to the Thyroid panel lab report for Elijah Pérez (born 1970-05-21), received 2025-06-10?",SKIP,,ANSWER,RELEASE,6.8,
+i024,lab,"Does the Complete blood count lab report for Jackson, George (DOB 2010-07-30), received on 2026-01-10, need a call to the provider, a nurse review, or release to the patient?",SKIP,,SKIP,,10.0,llm TimeoutError(); final TimeoutError()
+i025,lab,"Next step for a lab report: Noelle Freeman, Basic metabolic panel, received 2025-03-08.",SKIP,,SKIP,,8.3,time; final guess too unsure (0.0)
+i026,lab,Please decide what to do with the Complete blood count lab report received on 2026-06-13 for Jose Wheeler.,SKIP,,SKIP,,9.8,time; final TimeoutError()
+i027,phone,What phone number do we have on file for patient Mei Vega (born 1959-08-10)?,ANSWER,(785) 429-1408,SKIP,,9.8,time; final TimeoutError()
+i028,referral_source,Referral letter received on 2024-12-20 for patient Nicole Rodríguez (born 1958-09-27): which practice made the referral?,ANSWER,Plains Dermatology Associates,ANSWER,Plains Dermatology Associates,2.5,
+i029,lab,"Next step for a lab report: George García, Complete blood count, received 2026-10-14.",SKIP,,SKIP,,8.3,llm TimeoutError(); final guess too unsure (0.0)
+i031,lab,"Does the Complete blood count lab report for Young, Colleen (DOB 1970-10-15), received on 2026-07-21, need a call to the provider, a nurse review, or release to the patient?",SKIP,,SKIP,,9.6,llm TimeoutError(); final TimeoutError()
+i032,phone,What phone number do we have on file for patient Eric Engstrom (born 2013-02-14)?,ANSWER,(719) 631-4553,SKIP,,6.0,time; final TimeoutError()
+i033,lab,"Does the Complete blood count lab report for Shaw, Julie (DOB 1939-05-15), received on 2026-10-02, need a call to the provider, a nurse review, or release to the patient?",SKIP,,ANSWER,RELEASE,3.7,
+i034,lab,"What happens to the Thyroid panel lab report for Emma Howard (born 2011-10-09), received 2026-08-12?",SKIP,,ANSWER,RELEASE,3.5,
+i035,tetanus,What should Douglas Walker have gotten for tetanus when they came in with a wound on 2025-09-23?,SKIP,,SKIP,,8.7,time; final guess too unsure (0.0)
+i036,lab,"Does the Basic metabolic panel lab report for Davis, Rosa (DOB 2003-06-17), received on 2025-03-04, need a call to the provider, a nurse review, or release to the patient?",SKIP,,ANSWER,NURSE_REVIEW:1,6.1,
+i037,tetanus,What should Amy Marshall have gotten for tetanus when they came in with a wound on 2024-10-29?,SKIP,,ANSWER,NO_WOUND_VISIT,5.9,
+i038,tetanus,"Doing chart review on wound visits. Mary Turner, DOB 2008-09-03, came in on 2024-11-17. What was due for tetanus?",SKIP,,ANSWER,NO_WOUND_VISIT,4.2,
+i039,tetanus,"I want to make sure we got the tetanus part right for Valdez, John (born 2016-04-07), seen 2026-05-05.",ANSWER,NONE:4:2021-05-05,SKIP,,9.4,llm TimeoutError(); final TimeoutError()
+i040,lab,"What happens to the Complete blood count lab report for Thomas Smith (born 1963-01-07), received 2026-06-25?",SKIP,,SKIP,,9.3,time; final TimeoutError()
+i041,phone,What phone number do we have on file for patient Larry Perry (born 1933-06-24)?,ANSWER,(620) 615-7000,ANSWER,(620) 615-7000,4.5,
+i042,lab,"What happens to the Complete blood count lab report for John Coleman (born 1943-01-18), received 2026-05-15?",SKIP,,ANSWER,CALL_PROVIDER_NOW:Platelet count,9.1,
+i043,tetanus,"I want to make sure we got the tetanus part right for Sanders, Mary (born 1934-08-23), seen 2026-05-22.",ANSWER,VACCINE:2:2023-05-02,ANSWER,VACCINE:2:2023-05-02,7.5,
+i045,tetanus,"I want to make sure we got the tetanus part right for Baker, Richard (born 1940-02-14), seen 2025-09-17.",SKIP,,SKIP,,9.1,time; final TimeoutError()
+i046,provider_appt_count,"As of now, how many scheduled appointments does Anthony Smith, DO have on 2026-10-29 across all locations? Leave out appointments of patients whose record is a test record or has been deleted.",SKIP,,SKIP,,4.9,time (nothing read)
+i047,lab,"Next step for a lab report: Jose Rivera, Complete blood count, received 2026-05-13.",SKIP,,SKIP,,6.2,time; final guess too unsure (0.0)
+i048,lab,"What happens to the Complete blood count lab report for Bradley Owens (born 1955-07-17), received 2025-10-09?",SKIP,,SKIP,,8.9,time; final TimeoutError()
+i049,tetanus,"Doing chart review on wound visits. Sofía Hollis, DOB 1993-10-15, came in on 2025-10-14. What was due for tetanus?",SKIP,,SKIP,,8.8,llm TimeoutError(); final TimeoutError()
+i050,lab,"What happens to the Complete blood count lab report for Ethan Chavez (born 1980-02-27), received 2025-05-09?",SKIP,,SKIP,,8.8,llm TimeoutError(); final TimeoutError()
+i051,tetanus,"I want to make sure we got the tetanus part right for Jackson, Christopher (born 2021-11-15), seen 2024-08-07.",SKIP,,ANSWER,NONE:4:2023-06-01,5.7,
+i052,provider_appt_count,"As of now, how many scheduled appointments does Vincent Perez, MD have on 2026-11-02 across all locations? Leave out appointments of patients whose record is a test record or has been deleted.",SKIP,,SKIP,,4.6,time (nothing read)
+i053,provider_appt_count,"As of now, how many scheduled appointments does Ana Cruz, NP have on 2026-11-19 across all locations? Leave out appointments of patients whose record is a test record or has been deleted.",SKIP,,SKIP,,4.6,time (nothing read)
+i054,lab,"What happens to the Liver function panel lab report for Karen Lee (born 1961-12-01), received 2026-08-02?",ANSWER,NOT_COVERED,ANSWER,NOT_COVERED,2.7,
+i055,provider_appt_count,"As of now, how many scheduled appointments does Henry Stephens, MD have on 2026-11-02 across all locations? Leave out appointments of patients whose record is a test record or has been deleted.",SKIP,,SKIP,,3.0,time (nothing read)
+i056,lab,"Does the Thyroid panel lab report for Miller, Jessica (DOB 1994-07-28), received on 2025-12-03, need a call to the provider, a nurse review, or release to the patient?",SKIP,,ANSWER,RELEASE,8.0,
+i057,provider_appt_count,"As of now, how many scheduled appointments does Bruce Reed, NP have on 2026-11-11 across all locations? Leave out appointments of patients whose record is a test record or has been deleted.",SKIP,,SKIP,,4.5,"loop not allowed (hopeless kind, time short)"
+i058,provider_appt_count,"As of now, how many scheduled appointments does Gary Turner, PA have on 2026-11-09 across all locations? Leave out appointments of patients whose record is a test record or has been deleted.",SKIP,,SKIP,,4.5,"loop not allowed (hopeless kind, time short)"
+i059,tetanus,"Doing chart review on wound visits. Rebecca White, DOB 1970-07-23, came in on 2026-08-06. What was due for tetanus?",SKIP,,SKIP,,8.5,time; final TimeoutError()
+i060,tetanus,"Tetanus for Jean García on 2024-11-23: vaccine, vaccine and TIG, or nothing?",SKIP,,SKIP,,7.5,time; final guess too unsure (0.0)
+i061,provider_appt_count,"As of now, how many scheduled appointments does Bridget Campbell, MD have on 2026-11-02 across all locations? Leave out appointments of patients whose record is a test record or has been deleted.",SKIP,,SKIP,,4.4,"loop not allowed (hopeless kind, time short)"
+i063,open_slots,"How many open slots are there for Ethan Holmes, NP at Northgate on 2026-11-27? By open slot I mean a bookable time in the provider's working hours at that location that doesn't overlap any time off or any scheduled or completed appointment.",SKIP,,ANSWER,12,0.2,
+i064,lab,"What happens to the Basic metabolic panel lab report for Noah Martinez (born 1978-07-23), received 2026-10-14?",ANSWER,NOT_COVERED,ANSWER,NOT_COVERED,2.9,
+i065,tetanus,"Tetanus for Priya Mitchell on 2025-08-21: vaccine, vaccine and TIG, or nothing?",SKIP,,SKIP,,7.5,time; final guess too unsure (0.0)
+i066,phone,What phone number do we have on file for patient Robert Bennett (born 1986-02-11)?,ANSWER,(785) 904-8700,ANSWER,(785) 904-8700,3.8,
+i067,lab,Please decide what to do with the Basic metabolic panel lab report received on 2026-10-02 for Camila Murphy.,ANSWER,NOT_COVERED,ANSWER,NOT_COVERED,2.3,
+i068,provider_appt_count,"How many scheduled appointments does Hannah West, MD have on 2026-11-10, at any location? Leave out appointments of patients whose record is a test record or has been deleted.",SKIP,,ANSWER,8,19.8,
+i069,open_slots,"How many open slots are there for Jesse Morgan, MD at Highline on 2026-12-01? By open slot I mean a bookable time in the provider's working hours at that location that doesn't overlap any time off or any scheduled or completed appointment.",SKIP,,ANSWER,14,0.3,
+i070,lab,Please decide what to do with the Basic metabolic panel lab report received on 2026-10-02 for Rebecca Barrett.,ANSWER,NOT_COVERED,ANSWER,NOT_COVERED,3.4,
+i071,invoice_owed,"As of now, how much is still owed on invoice 42750277 (patient Paul Gray, service date 2026-06-22)? Give the amount in dollars. Still owed means the amount billed minus the payments received, and a voided invoice owes nothing.",SKIP,,SKIP,,4.8,time; final guess too unsure (0.0)
+i072,open_slots,"How many open slots are there for Samantha Morales, DO at Front Range on 2026-11-01? By open slot I mean a bookable time in the provider's working hours at that location that doesn't overlap any time off or any scheduled or completed appointment.",SKIP,,ANSWER,5,0.2,
+i073,open_slots,"How many open slots are there for Omar Dean, MD at Riverbend on 2026-12-03? By open slot I mean a bookable time in the provider's working hours at that location that doesn't overlap any time off or any scheduled or completed appointment.",SKIP,,ANSWER,11,0.3,
+i074,phone,What phone number do we have on file for patient Brittany Sorensen (born 2020-07-24)?,ANSWER,(785) 518-2942,SKIP,,4.3,"loop not allowed (hopeless kind, time short)"
+i075,lab,"What happens to the Basic metabolic panel lab report for Emily Harvey (born 2008-06-17), received 2026-08-20?",ANSWER,NOT_COVERED,ANSWER,NOT_COVERED,5.0,
+i077,provider_appt_count,"How many scheduled appointments does Omar Dean, MD have on 2026-12-09, at any location? Leave out appointments of patients whose record is a test record or has been deleted.",SKIP,,SKIP,,3.0,time (nothing read)
+i078,recall_count,How many patients are left to notify about the recall of lot C482FU1?,SKIP,,SKIP,,13.8,time
+i079,lab,Please decide what to do with the Basic metabolic panel lab report received on 2026-05-30 for Omar Peters.,SKIP,,SKIP,,6.8,time; final guess too unsure (0.05)
+i080,recall_count,"Recall, lot 5NF133C: patients left to notify?",SKIP,,SKIP,,6.3,llm TimeoutError(); final guess too unsure (0.0)
+i081,phone,What phone number do we have on file for patient Brenda Espinoza (born 1975-09-16)?,ANSWER,(620) 675-2228,ANSWER,(620) 675-2228,3.7,
+i082,phone,What phone number do we have on file for patient Barrett Harper (born 2009-08-12)?,ANSWER,(620) 830-6743,SKIP,,4.0,"loop not allowed (hopeless kind, time short)"
+i083,completed_visit_count,How many completed visits at Cedar Hollow on 2026-07-27 started before 14:00 local time? Leave out appointments of patients whose record is a test record or has been deleted.,SKIP,,SKIP,,4.7,time; final guess too unsure (0.0)
+i084,phone,What phone number do we have on file for patient Gregory Brown (born 1964-06-16)?,ANSWER,(620) 255-1581,ANSWER,(620) 255-1581,4.0,
+i085,recall_count,How many patients are left to notify about the recall of lot 71KM95J?,SKIP,,SKIP,,16.6,time
+i086,lab,"Does the Basic metabolic panel lab report for White, Sarah (DOB 1987-11-29), received on 2025-12-02, need a call to the provider, a nurse review, or release to the patient?",SKIP,,SKIP,,7.4,time; final TimeoutError()
+i087,lab,"Does the Basic metabolic panel lab report for Cox, Paul (DOB 1963-05-04), received on 2026-05-20, need a call to the provider, a nurse review, or release to the patient?",SKIP,,SKIP,,7.3,time; final TimeoutError()
+i088,referral_source,Referral letter received on 2024-10-20 for patient Caleb Johnson (born 1967-02-19): which practice made the referral?,ANSWER,Wickford Women's Health,ANSWER,Wickford Women's Health,2.9,
+i089,recall_count,Could you count how many of our patients still haven't been told about the recall of vaccine lot 63XF12L?,SKIP,,SKIP,,12.9,time
+i090,recall_count,We've had a recall notice for vaccine lot 82JG29H. How many patients still need to be told?,SKIP,,SKIP,,3.9,time; final guess too unsure (0.0)
+i091,tetanus,"Doing chart review on wound visits. James Mills, DOB 1952-03-11, came in on 2026-02-28. What was due for tetanus?",SKIP,,ANSWER,VACCINE:0:NONE,5.6,
+i092,lab,"Does the Basic metabolic panel lab report for Johnson, Sarah (DOB 1987-10-09), received on 2026-03-13, need a call to the provider, a nurse review, or release to the patient?",SKIP,,SKIP,,7.0,llm TimeoutError(); final TimeoutError()
+i093,recall_count,Could you count how many of our patients still haven't been told about the recall of vaccine lot 5LG140V?,SKIP,,SKIP,,5.6,time; final guess too unsure (0.0)
+i094,phone,What phone number do we have on file for patient Robert Maldonado (born 2019-07-25)?,ANSWER,(785) 989-1534,SKIP,,3.5,"loop not allowed (hopeless kind, time short)"
+i095,open_slots,"How many open slots are there for Henry Stephens, MD at Cedar Hollow on 2026-11-02? By open slot I mean a bookable time in the provider's working hours at that location that doesn't overlap any time off or any scheduled or completed appointment.",SKIP,,ANSWER,11,0.3,
+i097,recall_count,"Recall, lot Y910RG0: patients left to notify?",SKIP,,SKIP,,4.8,time; final guess too unsure (0.0)
+i098,recall_count,Could you count how many of our patients still haven't been told about the recall of vaccine lot 36JR47H?,SKIP,,SKIP,,3.7,time; final guess too unsure (0.0)
+i099,invoice_owed,"What's still owed on invoice 42986171 (patient Jesus Hudson, service date 2025-07-21), in dollars? Still owed means the amount billed minus the payments received, and a voided invoice owes nothing.",SKIP,,SKIP,,3.4,time; final guess too unsure (0.0)
+i100,phone,What phone number do we have on file for patient Peter Vargas (born 1964-07-21)?,ANSWER,(970) 349-3995,ANSWER,(970) 349-3995,4.7,
+i101,completed_visit_count,"How many completed visits did Ana Cruz, NP have on 2026-04-15? Count visits at any location. Leave out appointments of patients whose record is a test record or has been deleted.",SKIP,,SKIP,,3.4,time (nothing read)
+i102,lab,"What happens to the Complete blood count lab report for Shirley Smith (born 2012-02-18), received 2026-10-02?",SKIP,,SKIP,,6.7,time; final TimeoutError()
+i103,invoice_owed,"What's still owed on invoice 98820171 (patient Steven Williams, service date 2025-04-22), in dollars? Still owed means the amount billed minus the payments received, and a voided invoice owes nothing.",SKIP,,SKIP,,5.6,time; final guess too unsure (0.0)
+i104,lab,"Next step for a lab report: Angela Salazar, Complete blood count, received 2026-09-28.",SKIP,,SKIP,,2.9,time; final guess too unsure (0.2)
+i105,lab,"What happens to the Lipid panel lab report for Patricia Butler (born 1983-05-16), received 2025-09-21?",ANSWER,NOT_COVERED,ANSWER,NOT_COVERED,2.8,
+i106,completed_visit_count,"How many completed visits did Juan Martin, NP have on 2024-12-20? Count visits at any location. Leave out appointments of patients whose record is a test record or has been deleted.",SKIP,,SKIP,,3.3,time (nothing read)
+i107,lab,"Does the Basic metabolic panel lab report for Johnson, Paul (DOB 2008-12-30), received on 2024-11-18, need a call to the provider, a nurse review, or release to the patient?",SKIP,,SKIP,,6.5,llm TimeoutError(); final TimeoutError()
+i108,top_providers,"Which three providers had the most completed visits across all locations in January 2025? List them with the most first, by first and last name. Only providers who are active today count. Leave out appointments of patients whose record is a test record or has been deleted. If any are tied, put them in alphabetical order by last name, then first name.",SKIP,,SKIP,,4.8,llm TimeoutError(); final guess too unsure (0.0)
+i109,recall_count,"Recall, lot 0PZ245B: patients left to notify?",SKIP,,SKIP,,2.9,time; final guess too unsure (0.02)
+i110,recall_count,How many patients are left to notify about the recall of lot N909SJ1?,SKIP,,SKIP,,0.0,"loop not allowed (hopeless kind, time short)"
+i111,invoice_owed,"What's still owed on invoice 99403747 (patient Betty Brown, service date 2026-07-31), in dollars? Still owed means the amount billed minus the payments received, and a voided invoice owes nothing.",SKIP,,SKIP,,5.1,time; final guess too unsure (0.0)
+i112,recall_count,We've had a recall notice for vaccine lot TF0252R. How many patients still need to be told?,SKIP,,SKIP,,3.5,llm TimeoutError() (nothing read)
+i113,phone,What phone number do we have on file for patient Shirley Whitaker (born 1958-03-05)?,ANSWER,(785) 630-0691,SKIP,,3.2,"loop not allowed (hopeless kind, time short)"
+i114,open_slots,"How many open slots are there for Samantha Morales, DO at Front Range on 2026-12-21? By open slot I mean a bookable time in the provider's working hours at that location that doesn't overlap any time off or any scheduled or completed appointment.",SKIP,,ANSWER,15,0.2,
+i115,unique_patient_count,"How many patients had at least one completed visit at Willow Creek in August 2025? Count each person once even if they are registered more than once, and leave out test records and deleted records.",SKIP,,SKIP,,5.4,llm TimeoutError(); final guess too unsure (0.0)
+i116,referral_source,Referral letter received on 2025-03-18 for patient Joseph Tucker (born 1985-10-13): which practice made the referral?,ANSWER,Tilden Grove Pediatrics,ANSWER,Tilden Grove Pediatrics,5.6,
+i117,invoice_owed,"What's still owed on invoice 32208721 (patient Abigail Gardner, service date 2025-03-13), in dollars? Still owed means the amount billed minus the payments received, and a voided invoice owes nothing.",SKIP,,SKIP,,0.0,"loop not allowed (hopeless kind, time short)"
+i119,referral_source,Referral letter received on 2025-09-28 for patient Michael Kelly (born 2007-12-12): which practice made the referral?,ANSWER,Summit Hollow Cardiology Partners,ANSWER,Summit Hollow Cardiology Partners,2.9,
+i121,phone,What phone number do we have on file for patient Beverly Phillips (born 1941-12-30)?,ANSWER,(785) 386-0709,SKIP,,3.1,"loop not allowed (hopeless kind, time short)"
+i122,claim_next_step,"Next step on claim: Murphy, Samantha, DOB 1933-09-28, service date 2026-03-16",SKIP,,SKIP,,4.5,time; final guess too unsure (0.02)
+i123,phone,What phone number do we have on file for patient Colleen Nelson (born 2024-09-16)?,ANSWER,(719) 281-4527,SKIP,,3.1,"loop not allowed (hopeless kind, time short)"
+i124,claim_next_step,I'm going through the claim for Bradley Johnston with the date of service 2026-06-16. Where does it go from here?,SKIP,,SKIP,,3.5,time; final guess too unsure (0.15)
+i125,referral_reason,Referral letter received on 2025-10-04 for patient Megan Rodriguez (born 1980-05-17): what reason does it give for the referral?,SKIP,,ANSWER,Knee pain with suspected meniscal tear,2.5,
+i126,recall_count,We've had a recall notice for vaccine lot D82W70A. How many patients still need to be told?,SKIP,,SKIP,,3.3,llm TimeoutError() (nothing read)
+i127,claim_next_step,I'm going through the claim for Harold Wells with the date of service 2026-07-24. Where does it go from here?,SKIP,,SKIP,,3.2,time; final guess too unsure (0.0)
+i128,invoice_owed,"What's still owed on invoice 95710771 (patient David Lucas, service date 2025-11-28), in dollars? Still owed means the amount billed minus the payments received, and a voided invoice owes nothing.",SKIP,,SKIP,,0.0,"loop not allowed (hopeless kind, time short)"
+i129,claim_next_step,"Next step on claim: Payne, Roger, DOB 1964-04-07, service date 2026-07-16",SKIP,,SKIP,,3.8,time; final guess too unsure (0.0)
+i130,unique_patient_count,"How many patients have at least one scheduled appointment at Front Range in December 2026? Count each person once even if they are registered more than once, and leave out test records and deleted records.",SKIP,,SKIP,,2.9,time; final guess too unsure (0.0)
+i131,phone,What phone number do we have on file for patient Michael Young (born 2018-10-07)?,ANSWER,(719) 424-7211,SKIP,,3.0,"loop not allowed (hopeless kind, time short)"
+i133,claim_next_step,"Next step on claim: Lee, Elena, DOB 2023-07-02, service date 2026-08-28",SKIP,,SKIP,,2.9,time; final guess too unsure (0.02)
+i134,unique_patient_count,"How many patients had at least one completed visit at Northgate in May 2025? Count each person once even if they are registered more than once, and leave out test records and deleted records.",SKIP,,SKIP,,4.1,time; final guess too unsure (0.0)
+i135,provider_appt_count,"How many scheduled appointments does Anthony Smith, DO have on 2026-11-02, at any location? Leave out appointments of patients whose record is a test record or has been deleted.",SKIP,,SKIP,,3.0,time (nothing read)
+i136,referral_reason,Referral letter received on 2025-03-12 for patient Brittany Fields (born 2000-08-29): what reason does it give for the referral?,SKIP,,ANSWER,Suspicious skin lesion on the left forearm,4.1,
+i137,claim_next_step,"Could you look at the claim for Melissa Hill, born 1984-07-17, with the date of service 2026-02-10, and tell me the next step?",SKIP,,ANSWER,APPEAL:2026-12-12,1.6,
+i138,provider_appt_count,"How many scheduled appointments does Renee Lopez, MD have on 2026-11-02, at any location? Leave out appointments of patients whose record is a test record or has been deleted.",SKIP,,SKIP,,3.0,time (nothing read)
+i139,claim_next_step,"Next step on claim: Jackson, Robert, DOB 2009-02-05, service date 2026-06-04",SKIP,,SKIP,,4.6,time; final guess too unsure (0.02)
+i140,claim_next_step,"Could you look at the claim for Gary Kim, born 2022-01-28, with the date of service 2026-03-03, and tell me the next step?",SKIP,,SKIP,,4.5,time; final guess too unsure (0.02)
+i141,claim_next_step,"Could you look at the claim for Robert Lee, born 2016-01-22, with the date of service 2026-06-25, and tell me the next step?",SKIP,,ANSWER,WRITE_OFF:190.00,0.8,
+i142,claim_next_step,"What's next for the claim for Doris Ryan, date of service 2025-05-02?",SKIP,,SKIP,,4.7,time; final guess too unsure (0.0)
+i143,claim_next_step,"Next step on claim: Morgan, Bruce, DOB 2018-05-09, service date 2026-07-06",SKIP,,SKIP,,6.0,time; final TimeoutError()
+i144,referral_reason,Referral letter received on 2026-09-26 for patient Terry Mason (born 1938-10-04): what reason does it give for the referral?,ANSWER,Unexplained weight loss,ANSWER,Unexplained weight loss,2.7,
+i145,claim_next_step,"Could you look at the claim for Yuki Thomas, born 2011-03-21, with the date of service 2026-07-09, and tell me the next step?",SKIP,,SKIP,,3.2,time; final guess too unsure (0.02)
+i146,claim_next_step,"Next step on claim: Arnold, James, DOB 1948-08-27, service date 2026-01-12",SKIP,,ANSWER,WRITE_OFF:158.00,0.9,
+i147,claim_next_step,"Next step on claim: Stewart, Harold, DOB 1983-02-27, service date 2026-03-31",SKIP,,ANSWER,RESUBMIT:PROCEDURE_CODE,0.7,
+i148,claim_next_step,"Could you look at the claim for Ryan Lewis, born 1988-01-04, with the date of service 2026-03-23, and tell me the next step?",SKIP,,SKIP,,4.6,time; final guess too unsure (0.02)
+i149,phone,What phone number do we have on file for patient Joyce Woods (born 1934-12-25)?,ANSWER,(970) 389-3527,SKIP,,3.0,"loop not allowed (hopeless kind, time short)"
+i151,unique_patient_count,"How many patients had at least one completed visit at Highline in August 2025? Count each person once even if they are registered more than once, and leave out test records and deleted records.",SKIP,,SKIP,,2.9,time; final guess too unsure (0.0)
+i152,invoice_owed,"As of now, how much is still owed on invoice 08614187 (patient Joe Franklin, service date 2026-08-03)? Give the amount in dollars. Still owed means the amount billed minus the payments received, and a voided invoice owes nothing.",SKIP,,SKIP,,0.0,"loop not allowed (hopeless kind, time short)"
+i153,open_slots,"How many open slots are there for Carlos Chen, NP at Northgate on 2026-12-28? By open slot I mean a bookable time in the provider's working hours at that location that doesn't overlap any time off or any scheduled or completed appointment.",SKIP,,ANSWER,19,0.2,
+i154,claim_next_step,"Could you look at the claim for Fatima Sanchez, born 1985-12-25, with the date of service 2026-02-27, and tell me the next step?",SKIP,,SKIP,,4.7,time; final guess too unsure (0.0)
+i155,filing_deadline,"Anderson, Alexander, DOB 1971-07-30, date of service 2026-08-31. We haven't billed this one yet. What's the deadline to file?",SKIP,,ANSWER,2027-02-26,0.7,
+i156,filing_deadline,"Khan, Kevin, DOB 2009-11-04, date of service 2026-07-31. We haven't billed this one yet. What's the deadline to file?",SKIP,,ANSWER,2026-12-28,0.7,
+i157,claim_next_step,"Could you look at the claim for Brenda Burke, born 1947-06-24, with the date of service 2026-05-13, and tell me the next step?",SKIP,,SKIP,,4.0,time; final guess too unsure (0.0)
+i158,claim_next_step,"Next step on claim: Nguyen, Justin, DOB 1975-10-01, service date 2025-08-04",SKIP,,SKIP,,3.0,"loop not allowed (hopeless kind, time short)"
+i159,claim_next_step,"What's next for the claim for Rachel Riley, date of service 2026-02-23?",SKIP,,SKIP,,3.2,llm TimeoutError() (nothing read)
+i160,filing_deadline,"Can we still file for Dennis Rivera's visit on 2026-06-04? If so, until when?",SKIP,,SKIP,,3.2,llm TimeoutError() (nothing read)
+i161,lab,"Does the Basic metabolic panel lab report for Gibson, Adam (DOB 1995-01-29), received on 2025-12-25, need a call to the provider, a nurse review, or release to the patient?",SKIP,,SKIP,,6.0,llm TimeoutError(); final TimeoutError()
+i162,open_slots,"How many open slots are there for Sara Garcia, MD at Cedar Hollow on 2026-12-23? By open slot I mean a bookable time in the provider's working hours at that location that doesn't overlap any time off or any scheduled or completed appointment.",SKIP,,ANSWER,22,0.2,
+i163,claim_next_step,"Could you look at the claim for Dorothy García, born 2006-06-30, with the date of service 2026-02-02, and tell me the next step?",SKIP,,ANSWER,WRITE_OFF:130.00,1.7,
+i165,unique_patient_count,"How many patients had at least one completed visit at Willow Creek in November 2025? Count each person once even if they are registered more than once, and leave out test records and deleted records.",SKIP,,SKIP,,2.9,time; final guess too unsure (0.0)
+i166,claim_next_step,"What's next for the claim for Amanda Pruitt, date of service 2026-02-12?",SKIP,,SKIP,,2.9,time; final guess too unsure (0.02)
+i167,filing_deadline,"John Rojas, born 2021-12-28, has a visit from 2026-01-09 on the not-yet-filed list. Could you work out the filing deadline before I send it?",SKIP,,ANSWER,EXPIRED:5,0.7,
+i168,claim_next_step,"Next step on claim: Bell, Lisa, DOB 1962-02-05, service date 2026-01-28",SKIP,,SKIP,,0.7,"loop not allowed (hopeless kind, time short)"
+i169,claim_next_step,"Next step on claim: Hall, James, DOB 2024-10-11, service date 2026-06-26",SKIP,,ANSWER,WRITE_OFF:110.00,0.9,
+i170,claim_next_step,I'm going through the claim for George Collins with the date of service 2026-01-07. Where does it go from here?,SKIP,,SKIP,,3.7,time; final guess too unsure (0.0)
+i171,claim_next_step,"Could you look at the claim for Sarah Jimenez, born 2015-12-19, with the date of service 2026-05-11, and tell me the next step?",SKIP,,ANSWER,BILL_PATIENT:111.36,0.7,
+i172,claim_next_step,"What's next for the claim for Katherine Sims, date of service 2026-10-07?",SKIP,,SKIP,,4.6,time; final guess too unsure (0.0)
+i173,provider_appt_count,"How many scheduled appointments does Charles James, NP have on 2026-10-26, at any location? Leave out appointments of patients whose record is a test record or has been deleted.",SKIP,,SKIP,,3.0,time (nothing read)
+i174,filing_deadline,"Can we still file for Astrid Bell's visit on 2026-01-02? If so, until when?",SKIP,,SKIP,,3.6,time; final guess too unsure (0.0)
+i175,filing_deadline,"Filing deadline for Kenneth Howell, DOS 2025-12-18?",SKIP,,SKIP,,3.5,time; final guess too unsure (0.0)
+i177,recall_count,How many patients are left to notify about the recall of lot 22UP75G?,SKIP,,SKIP,,0.0,"loop not allowed (hopeless kind, time short)"
+i178,filing_deadline,"Jessica Young, born 2016-10-23, has a visit from 2026-06-01 on the not-yet-filed list. Could you work out the filing deadline before I send it?",SKIP,,ANSWER,AWAITING_PRIMARY,1.2,
+i179,filing_deadline,"Filing deadline for Jessica Voss, DOS 2026-01-22?",SKIP,,SKIP,,3.7,time; final guess too unsure (0.0)
+i180,filing_deadline,"Richard Jones, born 1961-07-12, has a visit from 2026-05-15 on the not-yet-filed list. Could you work out the filing deadline before I send it?",SKIP,,ANSWER,EXPIRED:8,0.5,
+i181,referral_reason,Referral letter received on 2025-05-28 for patient Miguel López (born 1968-02-12): what reason does it give for the referral?,SKIP,,ANSWER,Post-fracture rehabilitation,5.0,
+i182,invoice_owed,"As of now, how much is still owed on invoice 41754548 (patient Robert Farrell, service date 2025-09-08)? Give the amount in dollars. Still owed means the amount billed minus the payments received, and a voided invoice owes nothing.",SKIP,,SKIP,,0.0,"loop not allowed (hopeless kind, time short)"
+i183,filing_deadline,"Nancy Williams, born 2021-08-19, has a visit from 2026-02-13 on the not-yet-filed list. Could you work out the filing deadline before I send it?",SKIP,,ANSWER,EXPIRED:153,0.7,
+i184,filing_deadline,"Shaw, Carlos, DOB 1968-10-24, date of service 2026-03-18. We haven't billed this one yet. What's the deadline to file?",SKIP,,ANSWER,EXPIRED:77,0.7,
+i185,filing_deadline,"Filing deadline for Larry Jiménez, DOS 2026-09-24?",SKIP,,SKIP,,3.2,llm TimeoutError() (nothing read)
+i186,claim_next_step,I'm going through the claim for María Cole with the date of service 2026-03-18. Where does it go from here?,SKIP,,SKIP,,3.5,time; final guess too unsure (0.0)
+i187,invoice_owed,"As of now, how much is still owed on invoice 45138187 (patient David Palmer, service date 2025-11-11)? Give the amount in dollars. Still owed means the amount billed minus the payments received, and a voided invoice owes nothing.",SKIP,,SKIP,,0.0,"loop not allowed (hopeless kind, time short)"
+i188,invoice_owed,"As of now, how much is still owed on invoice 09801089 (patient Kevin Campbell, service date 2026-05-13)? Give the amount in dollars. Still owed means the amount billed minus the payments received, and a voided invoice owes nothing.",SKIP,,SKIP,,0.0,"loop not allowed (hopeless kind, time short)"
+i189,invoice_owed,"As of now, how much is still owed on invoice 41194885 (patient Teresa Smith, service date 2025-10-07)? Give the amount in dollars. Still owed means the amount billed minus the payments received, and a voided invoice owes nothing.",SKIP,,SKIP,,0.0,"loop not allowed (hopeless kind, time short)"
+i190,invoice_owed,"As of now, how much is still owed on invoice 32772942 (patient Cheryl Thompson, service date 2026-07-23)? Give the amount in dollars. Still owed means the amount billed minus the payments received, and a voided invoice owes nothing.",SKIP,,SKIP,,0.0,"loop not allowed (hopeless kind, time short)"
+i191,invoice_owed,"As of now, how much is still owed on invoice 30997252 (patient Jerry Aguilar, service date 2025-05-19)? Give the amount in dollars. Still owed means the amount billed minus the payments received, and a voided invoice owes nothing.",SKIP,,SKIP,,0.0,"loop not allowed (hopeless kind, time short)"
+i192,invoice_owed,"What's still owed on invoice 32908187 (patient Lisa Robinson, service date 2026-03-18), in dollars? Still owed means the amount billed minus the payments received, and a voided invoice owes nothing.",SKIP,,SKIP,,0.0,"loop not allowed (hopeless kind, time short)"
+i193,invoice_owed,"As of now, how much is still owed on invoice 28228021 (patient Melissa Sánchez, service date 2024-10-27)? Give the amount in dollars. Still owed means the amount billed minus the payments received, and a voided invoice owes nothing.",SKIP,,SKIP,,0.0,"loop not allowed (hopeless kind, time short)"
+i194,invoice_owed,"As of now, how much is still owed on invoice 53244474 (patient Elliott Ortiz, service date 2025-11-19)? Give the amount in dollars. Still owed means the amount billed minus the payments received, and a voided invoice owes nothing.",SKIP,,SKIP,,0.0,"loop not allowed (hopeless kind, time short)"
+i195,unique_patient_count,"How many patients have at least one scheduled appointment at Lakeside in December 2026? Count each person once even if they are registered more than once, and leave out test records and deleted records.",SKIP,,SKIP,,0.0,"loop not allowed (hopeless kind, time short)"
+i196,claim_next_step,"What's next for the claim for Bobby Torres, date of service 2026-05-08?",SKIP,,SKIP,,3.1,time; final guess too unsure (0.0)
+i197,provider_appt_count,"How many scheduled appointments does Patrick Yamamoto, PA have on 2026-11-02, at any location? Leave out appointments of patients whose record is a test record or has been deleted.",SKIP,,SKIP,,3.0,time (nothing read)
+i199,good_faith_estimate,"Aaron Mendoza is on the books for 2026-01-08 at 14:45. Do we owe them a good faith estimate, and by when?",SKIP,,SKIP,,3.6,time; final guess too unsure (0.0)
+i200,referral_source,Referral letter received on 2026-03-31 for patient William Taylor (born 1969-08-07): which practice made the referral?,ANSWER,Alder Creek Family Practice,ANSWER,Alder Creek Family Practice,3.1,
+i201,lab,"Does the Complete blood count lab report for Jones, William (DOB 1959-02-11), received on 2026-10-01, need a call to the provider, a nurse review, or release to the patient?",SKIP,,SKIP,,6.0,llm TimeoutError(); final TimeoutError()
+i202,provider_appt_count,"How many scheduled appointments does Amy Fuller, NP have on 2026-12-10, at any location? Leave out appointments of patients whose record is a test record or has been deleted.",SKIP,,ANSWER,3,0.8,
+i203,invoice_owed,"What's still owed on invoice 21669274 (patient Janice Bennett, service date 2026-03-24), in dollars? Still owed means the amount billed minus the payments received, and a voided invoice owes nothing.",SKIP,,SKIP,,0.0,"loop not allowed (hopeless kind, time short)"
+i204,claim_next_step,"Could you look at the claim for Elizabeth Robinson, born 1953-06-14, with the date of service 2025-10-23, and tell me the next step?",SKIP,,ANSWER,WRITE_OFF:145.00,1.0,
+i205,provider_appt_count,"How many scheduled appointments does Justin Arnold, MD have on 2026-11-18, at any location? Leave out appointments of patients whose record is a test record or has been deleted.",SKIP,,SKIP,,3.0,time (nothing read)
+i206,lab,"Next step for a lab report: Noëlle Martinez, Complete blood count, received 2026-08-26.",SKIP,,SKIP,,0.0,"loop not allowed (hopeless kind, time short)"
+i207,lab,"What happens to the Complete blood count lab report for Patricia Ramos (born 1980-04-28), received 2026-10-11?",SKIP,,SKIP,,5.3,time; final guess too unsure (0.05)
+i208,invoice_owed,"What's still owed on invoice 61629591 (patient Judy Sanders, service date 2026-04-14), in dollars? Still owed means the amount billed minus the payments received, and a voided invoice owes nothing.",SKIP,,SKIP,,0.0,"loop not allowed (hopeless kind, time short)"
+i209,claim_next_step,I'm going through the claim for Dylan Roberts with the date of service 2026-04-23. Where does it go from here?,SKIP,,SKIP,,1.7,time (nothing read)
+i210,good_faith_estimate,"Good faith estimate question: Lee, Austin, born 2016-05-05, 08:20 on 2026-10-27. Is one required, and if so, when's it due?",SKIP,,SKIP,,6.0,time; final TimeoutError()
+i211,claim_next_step,"Could you look at the claim for Evelyn Green, born 2011-12-29, with the date of service 2026-06-08, and tell me the next step?",SKIP,,ANSWER,RESUBMIT:RENDERING_PROVIDER_ID,0.7,
+i213,good_faith_estimate,When is the good faith estimate due for Ronald Lindqvist (DOB 1949-07-11)? Appointment 2025-10-02 11:00.,SKIP,,SKIP,,6.0,time; final TimeoutError()
+i214,referral_reason,Referral letter received on 2025-02-23 for patient Christina Spencer (born 2014-06-16): what reason does it give for the referral?,SKIP,,ANSWER,Chronic cough lasting more than eight weeks,2.6,
+i215,good_faith_estimate,"Good faith estimate question: Williams, Emma, born 1970-10-16, 13:00 on 2026-05-07. Is one required, and if so, when's it due?",SKIP,,ANSWER,NOT_REQUIRED:INSURED,4.3,
+i216,claim_next_step,"Next step on claim: Morrison, Jennifer, DOB 2024-01-02, service date 2025-12-24",SKIP,,SKIP,,0.7,"loop not allowed (hopeless kind, time short)"
+i217,good_faith_estimate,"Good faith estimate question: Johnson, Kenneth, born 2004-10-13, 17:00 on 2026-10-22. Is one required, and if so, when's it due?",SKIP,,SKIP,,3.9,time; final guess too unsure (0.05)
+i218,good_faith_estimate,"Bryan George is on the books for 2025-01-16 at 08:20. Do we owe them a good faith estimate, and by when?",SKIP,,SKIP,,3.0,time; final guess too unsure (0.0)
+i219,good_faith_estimate,When is the good faith estimate due for Keith Ortiz (DOB 1951-06-16)? Appointment 2025-07-29 13:00.,SKIP,,SKIP,,3.7,time; final guess too unsure (0.02)
+i220,good_faith_estimate,I'm putting together the paperwork for Madison López's 11:20 appointment on 2026-01-09. What's the last day to get the good faith estimate to them?,SKIP,,SKIP,,6.0,time; final TimeoutError()
+i221,filing_deadline,"Anderson, Patricia, DOB 1954-01-17, date of service 2026-05-29. We haven't billed this one yet. What's the deadline to file?",SKIP,,ANSWER,2027-02-26,0.6,
+i222,good_faith_estimate,I'm putting together the paperwork for Andrew Stewart's 14:30 appointment on 2025-01-06. What's the last day to get the good faith estimate to them?,SKIP,,SKIP,,0.5,time (nothing read)
+i223,filing_deadline,"Can we still file for Ana Sanchez's visit on 2026-02-13? If so, until when?",SKIP,,SKIP,,0.4,time (nothing read)
+i224,good_faith_estimate,When is the good faith estimate due for Patrick Jones (DOB 2011-03-17)? Appointment 2024-11-27 11:00.,SKIP,,SKIP,,2.6,time; final guess too unsure (0.02)
+i225,unique_patient_count,"How many patients had at least one completed visit at Eastside in December 2024? Count each person once even if they are registered more than once, and leave out test records and deleted records.",SKIP,,SKIP,,0.0,"loop not allowed (hopeless kind, time short)"
+i226,good_faith_estimate,"Patrick Watkins is on the books for 2025-11-17 at 13:00. Do we owe them a good faith estimate, and by when?",SKIP,,SKIP,,0.0,time (nothing read)
+i227,claim_next_step,"Next step on claim: Fisher, Daniel, DOB 1971-08-03, service date 2026-01-21",SKIP,,ANSWER,WRITE_OFF:145.00,0.9,
+i228,claim_next_step,"Could you look at the claim for Patricia Turner, born 2025-07-08, with the date of service 2026-10-09, and tell me the next step?",SKIP,,ANSWER,AWAIT_PAYER,0.7,
+i229,invoice_owed,"What's still owed on invoice 21991556 (patient Jennifer Hutchinson, service date 2025-09-26), in dollars? Still owed means the amount billed minus the payments received, and a voided invoice owes nothing.",SKIP,,SKIP,,0.0,"loop not allowed (hopeless kind, time short)"
+i230,phone,What phone number do we have on file for patient Martha Nelson (born 2019-06-24)?,SKIP,,SKIP,,1.0,"loop not allowed (hopeless kind, time short)"
+i231,claim_next_step,"Next step on claim: Farrell, Robert, DOB 2015-01-04, service date 2026-07-29",SKIP,,not reached,,,
+i232,claim_next_step,"Next step on claim: Miller, Barbara, DOB 1976-12-11, service date 2025-07-24",SKIP,,not reached,,,
+i233,good_faith_estimate,I'm putting together the paperwork for Megan Silva's 13:00 appointment on 2024-12-10. What's the last day to get the good faith estimate to them?,SKIP,,not reached,,,
+i234,invoice_owed,"What's still owed on invoice 89651037 (patient Brandon Foster, service date 2026-07-02), in dollars? Still owed means the amount billed minus the payments received, and a voided invoice owes nothing.",SKIP,,not reached,,,
+i235,open_slots,"How many open slots are there for Cheryl Taylor, MD at Eastside on 2026-12-29? By open slot I mean a bookable time in the provider's working hours at that location that doesn't overlap any time off or any scheduled or completed appointment.",SKIP,,not reached,,,
+i236,unique_patient_count,"How many patients had at least one completed visit at Northgate in September 2026? Count each person once even if they are registered more than once, and leave out test records and deleted records.",SKIP,,not reached,,,
+i237,invoice_owed,"What's still owed on invoice 23688445 (patient David Hernandez, service date 2026-10-14), in dollars? Still owed means the amount billed minus the payments received, and a voided invoice owes nothing.",SKIP,,not reached,,,
+i238,claim_next_step,"Could you look at the claim for Robert Sánchez, born 2017-07-05, with the date of service 2026-04-27, and tell me the next step?",SKIP,,not reached,,,
+i239,claim_next_step,"Could you look at the claim for Dorothy Williams, born 1978-02-11, with the date of service 2025-10-23, and tell me the next step?",SKIP,,not reached,,,
+i240,good_faith_estimate,When is the good faith estimate due for Karen Gibson (DOB 2002-04-28)? Appointment 2026-07-13 16:20.,SKIP,,not reached,,,

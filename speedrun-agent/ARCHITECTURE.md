@@ -1,98 +1,93 @@
-# Speedrun agent v5: architecture
+# v41 additions
 
-## Why v4 ran over time
-- **The Dockerfile overrode the time policy.** `ENV TASK_SECONDS=40`, `MAX_TURNS=25` and `TIME_STRETCH=3` won over
-  config.py, so a hard task could take 12 s or more against a budget of about 4 s per task (900 s / 224 tasks).
-- **Every task went through the model loop.** Find the patient, call a tool, submit: 3 to 5 model turns of about
-  1 s each, every one carrying a prompt of over 5k tokens. That is the 4 s budget gone before any page loads.
-- **Every message went into every prompt.** On the 924-task final set, messages pile up and every turn gets slower
-  and more expensive.
-- **Every phone task took a screenshot and made a vision call** (2–3 s), even after the digit scramble had been learned.
+## Evidence
+- v40 runs: Set 1 126 (126/0/98), Set 2 74 (79/5/142), Set 3 stalled: at 22.5 min 175 closed, 23 correct, 4 wrong,
+  148 skipped. Cause: `rules.kind_of` grouped invoice tasks with the lab rule and count tasks with the tetanus rule;
+  those kinds were written off after their first misses and every later task of them was skipped.
+- Set 1 (fixed, 224 tasks): 15 kinds by wording, 110 confirmed answers (agent/known_set1.py), live traces of v28/v29/v40.
 
-The queue gives one item at a time, so tasks can't run in parallel. Speed has to come from fewer model turns per task.
+## Changes
+```
+task --> playbook.category(text)  (first match of 15 regexes, built from Set 1's wordings)
+           |  c:<kind>: pages (templates), searches (forms), procedure, answer forms, worked examples, seeded/skip_hard
+           v
+       Kinds.of -> Kind(play=...)      (rule-word kinds and wording clusters only when no category fits)
+       Policy.decide -> gate()         (answers per second, fractional knapsack over the kinds seen)
+       Brain.solve: no-patient kinds skip the finder; lab coverage + invoice search before the finder;
+                    prefetch = playbook pages + learned pages + form searches (+ the found row's page) + doc images
+```
+- `agent/playbook.py`: the categories. Every regex is checked against all 224 Set 1 tasks (test/test_v41.py).
+- `agent/solvers.py`: `lab_not_covered` (instant), invoice found by the billing search form, exclusion cache.
+- `agent/site.py`: `submit_form` (fills and submits a form inside the content frame).
+- `agent/main.py`: `Policy.gate`, `yield_of`; seeded kinds' softer write-off; no quick tries when time is tight.
 
-## Component decisions
+## Known limits
+- The categories' pages/procedures come from one clinic. If a set's rule message changes a step, the model still
+  follows the message (the prompt says so), but the pre-opened pages may be the wrong ones (costs time, not points).
+- The gate's answer rates start from a prior (1 in 2 tries of 8 s) and need ~25 tasks to separate the kinds.
 
-| Component | Options weighed | Chosen | Why |
-|---|---|---|---|
-| Queue controller | sequential / prefetch next item | Sequential (the API allows nothing else). Messages are acknowledged at once; the rule compile runs in the background | One item at a time is a protocol rule |
-| Wrenfield access | raw HTTP / Playwright DOM / screenshots + vision | Playwright DOM extraction (kept from v4). Pages are cached by path. Vision is used only for phone digits | The layout-hash check blocks raw HTTP, and vision is slow and costly |
-| Task routing | LLM router / regex / embeddings | **Regex, with the records as the check.** A name only counts if the records have it, e.g. the provider is in the directory, or the patient's DOB and both names match | Costs 0 s and 0 model calls. When anything is unclear the general model loop takes over, so nothing is lost |
-| Answer logic | model reasons / deterministic code | **Code** for known kinds (new/established, phone, documents). The model loop handles everything else | Code gives the same answer every time and needs no model turns |
-| Rules memory | all messages in the prompt / summaries / compiled rules | Messages are stored word for word. When they exceed 16k characters, those sharing the most words with the task are kept. The N/E rule is **compiled to parameters and checked against the message text** | A summary could drop an exact answer format. The compiled rule is used only after every value in it is found in the message text |
-| Model orchestration | one model / per-role models | One fast model, reasoning effort low, with a short prompt per role: compile the rule, extract from a document, read a phone screenshot, run the general loop | The calls are small and a second model adds risk. Override with `MODEL` |
-| Time/budget | fixed cap / fair share / expected value | Fair share × 2.5, clamped to 4–20 s. Kinds of task the loop has never answered are skipped at once when time is short. The loop stops at 90 % of the set's budget | Skip and not reached both score 0, so slow skips steal time from tasks that could be answered |
+---
+
+# v40 architecture
+
+## Evidence it is built on
+- v29 submission s611d993e4646: Set 1 109 (109/0/115/0), Set 2 71 (81/10/116/19), Set 3 27 (28/1/190/**239 not reached**).
+- v29's Set 1 output: 7 live answers, all others from the table. Skip reasons: "find_patient -> [] ... only rows 1 to 20
+  of 250/700/1,050 shown" for tasks without a date of birth; "llm TimeoutError"; "loop not allowed (hopeless kind)"
+  for whole kinds (invoices, recall, estimates); synthesized solvers: 0 checked solvers that answered, $3.22 spent.
+- v28 Set 1: 503s from a burst of provider page loads, then "ACCOUNT SUSPENDED" and back-offs growing 30 -> 75 s while
+  tasks waited; Set 3 reached only 93 of 458.
+- The Library reading list given by the organizers: workflow memory, plan caching, record & replay, API agents.
 
 ## Data flow
 ```
-queue item ──message──▶ Rules.add (ack now) ─bg─▶ compile+check N/E rule
-          └─task──▶ Fast.solve ──regex kind──▶ pick_patient (DOB search, both names, one active chart)
-                       │                        ├─ N/E: provider in directory → appointment_history → rule → answer
-                       │                        ├─ phone: chart → learned digit map / screenshot+vision cross-check
-                       │                        └─ document: docs tab → one row on that date → PDF text → model extracts
-                       │                                                         → answer must appear word for word in the document
-                       └─None──▶ model tool loop (relevant messages, route hints, prefetch, ≤10 turns, deadline)
-                                     → shape check (phone digits, "how many" = number) → answer | skip
+queue item --message--> Rules.add (ack at once) --bg--> Learner: solve the rule's worked example
+          |                                          (answer matches -> checked example + page templates for its kind)
+          '--task--> Set 1 table? --yes--> answer (0 s)
+                       | no
+                       v
+                  Kinds.of(text)  (rule message it belongs to, else wording cluster)
+                  Policy.decide   (explore / normal(replay) / quick / fast-only / skip, cap seconds)
+                       |
+            asyncio.wait_for(Brain.solve(...), cap)        <- the only clock; nothing runs past it
+                       |
+   1. provider/location count tasks: deterministic solver first (no patient needed)
+   2. finder: DOB search -> documents/appointments list of the task's date -> sorted name walk
+   3. deterministic solvers (claims, filing deadlines, invoices, phone, referral, new/established)
+   4. prefetch: kind's page templates filled with this task's {pid, d0.., prov, loc, c0, n0}, the patient's
+      documents (text, or a screenshot of a scan attached as an image)
+   5. model loop (lean prompt: guide + this kind's rules + latest short messages + pre-opened pages +
+      "how earlier tasks of this kind were answered"), best-guess call when time runs out
+                       |
+              answer (conf >= 0.6) | skip  -> Kinds.learn(route -> templates), stats -> next item
 ```
 
-## Deterministic code vs LLM
-- **Code:** finding patients, resolving merged and restricted charts, paging, time zones, the 3-year window,
-  specialties, the N/E decision, answer templates, phone digit decoding, every validation, and time and budget.
-- **LLM:** flagging chatter, turning rule text into parameters (checked afterwards), pulling an answer out of a
-  document (checked word for word), reading a phone off a screenshot (checked against the digit substitution), and
-  the general loop for unknown kinds.
+## Time policy (agent/main.py Policy)
+- `fair = seconds left / tasks left` (Set 1: only the tasks the table does not answer count).
+- `reserve = (tasks left - 1) x SKIP_COST`: no task may eat into it, so the queue is always finished.
+- **proven kind** (answered before, or its rule example was solved): cap ~ 1.5 x its usual answer time, 6-14 s; when time
+  is tight a kind that answers < 35% and is slow drops to deterministic-only.
+- **new kind**: up to 2 exploring tries of 22 s while exploring has used < 22% of the shift; then "quick" tries (3.5-7 s).
+- **written off** (2 explores, no answer; or < 15% answered after 6 tries): deterministic paths only or an instant skip,
+  with one exploring retry every 7th task of the kind while time allows.
+- **account suspended**: wait for it to lift (flat 30 s back-off; v25 skipped ~45 tasks in one, v29 waited up to 120 s).
+- Simulation (test/sim_policy.py) reaches every task on 226/900 s, 458/1800 s and 924/3600 s.
 
-## Memory and state
-| Kind | Where | Lifetime |
+## Modules
+| File | Role | Origin |
 |---|---|---|
-| Shift rules/messages | `Rules.items` (verbatim), `Rules.ne` (checked parameters, the newest version wins) | whole shift |
-| Facts from Wrenfield | `Site.cache` (path → page), `specialty_cache`, `providers`, `digit_map` | whole shift (the data is read-only) |
-| Navigation knowledge | `notes.md` in the prompt and `nav_links` | static plus learned |
-| Task state | the loop's conversation and `opened_text` | one task |
-| Reusable patterns | `Memory.items` (the routes that answered similar tasks, given to the loop as hints) and `Memory.outcomes` (kinds that were never answered) | whole shift |
+| main.py | queue loop, policy, logging, per-kind stats | new |
+| brain.py | finder -> fast paths -> prefetch -> model loop -> best guess | new (loop/tools adapted from v29 solver.py) |
+| finder.py | patient resolution without a date of birth | new |
+| kinds.py | kind clustering, examples, route templates (plan caching) | new |
+| learn.py | background solving of rule examples | new (replaces synth.py) |
+| fast.py, solvers.py | deterministic paths (counts, slots, filing, claims, phone, referral, N/E) + invoice solver | v29 + invoice, uses the finder's patient |
+| site.py | Playwright driver, rate limit, suspension handling; + "Show more" lists, sorted list walk | v29 + changes |
+| clinic.py, rules.py, llm.py, queue.py, http.py | helpers | v29 (http: own thread pools) |
+| known_set1.py | 110 confirmed Set 1 answers | v29 table + 8 |
 
-## Error recovery
-- Any surprise in a fast path → `None` → the model loop takes over with every page it read already cached.
-- Model errors: 4 retries with backoff, and the `reasoning` field is dropped if a model rejects it.
-  A 402 stops all model calls, but N/E tasks still get answered without the model.
-- Queue: a 400 on an answer becomes a skip, a 409 carries the next state, and network errors are retried.
-- Uncertain cases are skipped: confidence < 0.7, a failed shape check, an unsafe tool result, a restricted chart,
-  an incomplete list, or a location switch that wasn't confirmed.
-
-## Time and budget allocation
-- Cap = clamp(2.5 × seconds left ÷ tasks left, 4, 20). Fast paths take about 1–2 s, so the time they save goes to
-  harder tasks later.
-- If the fair share drops below 6 s, a task like 3 or more earlier loop tasks that were all skipped is skipped at once.
-- Budgets per set ($1, $8, $15, $25) are known from the shift length. The loop stops at 90 % so the cheap calls
-  still work.
-
-## Highest-impact next steps (in order)
-1. Run practice and check `[fast]` against `loop`, and the `[rules] ... OK` line. Every task kind that shows up
-   often in the logs should get its own fast path, written the same way (regex → checked against the records → code).
-2. Log the kinds of task in the scored sets (`arena logs`) and add fast paths for the 3–5 most common
-   (billing balances, appointment counts, the provider for a date).
-3. Speed up page loads: lower the `_wait_content` quiet thresholds after measuring on the real site.
-4. Phone without vision: compare canvas renderings of the scrambled font against the body font.
-
-## Phases
-1. **Done (v5):** fast paths for N/E, phone and documents; compiled rules; chatter filtered from prompts; time
-   and budget policy; Dockerfile fixed.
-2. More fast paths, driven by the logs of scored sets.
-3. Tune page waits and the number of tabs on the real clinic, and phone decoding with no vision call.
-4. Lower the per-kind confidence threshold where the logs show answers are reliably right.
-
-## v7: fixes from practice run t6d60cc954d3e
-In that run no fast path fired. Each fix below targets a failure in its log:
-- **Thinking tokens.** Gemini 3.8 Flash spends max_tokens on thinking. With caps of 300–600 the rule compile and
-  the phone read came back empty, so every call now gets 3–4k. A reply with `finish_reason=length` is never used:
-  it is retried once, then the task falls back.
-- **429 concurrency_limit.** The proxy allows fewer requests in flight as the budget shrinks (1 at $1 left).
-  `LLM` keeps a slot limiter that follows the number given in the 429 message. The chatter classifier, a
-  needless extra call, is gone.
-- **Slow model turns (1.5–5.9 s).** Reasoning effort is now `low` by default. The loop submits a safe
-  `new_or_established` result at once instead of re-checking providers (that re-checking ran out the clock on one task).
-- **Documents with no PDF text.** "Which practice" is read from the document title in the list (about 0.5 s; confirmed
-  on the real site by the v6 run). Content questions fall back to a screenshot: the model must transcribe the page,
-  and its answer must appear in that transcription and be at least 2 words.
-- **Diagnosis.** Every fast-path fallback prints `[fast] fallback to the model loop: <why>`, and an empty PDF
-  download prints its size and first bytes.
+## Known limits / next steps (in order of value)
+1. Read the first v40 Set 1 output: per-kind lines at the end, `[learn]` results, `[finder]` hit rate, `[turn]` counts.
+2. Kinds the loop cannot do in time (recall counts over many charts, patient counts over a month of visits) need code
+   solvers written from their page layouts (dumped as `[layout]` in the Set 1 output).
+3. If suspensions appear (`ACCOUNT SUSPENDED` lines), lower NAV_PER_WINDOW to 15 and NAME_LIST_MAX_PAGES to 3.

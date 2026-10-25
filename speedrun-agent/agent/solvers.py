@@ -68,6 +68,9 @@ def date_of(s):
     return p[0] if p else parse_any_date(s or "")
 
 
+_EXCLUDED = {}   # chart -> True/False, for the whole shift (a chart's test/deleted flag does not change)
+
+
 async def excluded_patient(site, row):
     """True if the appointment's patient is a test record or deleted, False if not, None if it can't be told."""
     cell = row.get("Patient", "")
@@ -76,6 +79,15 @@ async def excluded_patient(site, row):
     chart = next((h for h in row["_links"] if re.fullmatch(r"/patients/[^/?#]+", h)), None)
     if not chart:
         return None
+    if chart in _EXCLUDED:
+        return _EXCLUDED[chart]
+    v = await _excluded_chart(site, chart)
+    if v is not None:
+        _EXCLUDED[chart] = v
+    return v
+
+
+async def _excluded_chart(site, chart):
     data = await site.read(chart, all_pages=False)
     text = data.get("text", "")
     if data.get("error"):
@@ -491,4 +503,230 @@ async def claim_next_step(fast, task):
     return write_off
 
 
-KINDS = [(COUNT_ANY, provider_counts), (SLOTS, open_slots), (FILING, filing_deadline), (CLAIM, claim_next_step)]
+# ------------------------------------------------------------------ amount still owed on an invoice (v40)
+# any wording with the invoice number, as long as the task carries the "voided invoice owes nothing" definition
+INVOICE = re.compile(r"\binvoice (?:number |no\.? ?|#\s?)?(\d{5,})\b(?=.*\bvoid)()", re.I | re.S)
+MONEY = re.compile(r"-?\$\s?(-?[\d,]+\.\d{2})")
+
+
+def _money(s):
+    m = MONEY.search(s or "")
+    return float(m.group(1).replace(",", "")) if m else None
+
+
+async def invoice_owed(fast, task):
+    """Patient -> billing account -> the invoice row -> invoice page (read fresh: payments post during the shift).
+    Still owed = billed - payments received; a void invoice owes nothing. Only ledgers made of charges and plain
+    payments are answered here (an adjustment, refund or reversal goes to the model loop)."""
+    m = INVOICE.search(task)
+    number = m.group(1) or m.group(2)
+    if not re.search(r"void", task, re.I):
+        return no("invoice task without the void instruction")
+    link = None
+    # v41: the billing search form finds the invoice by number (its URL filter is ignored), no patient search needed
+    try:
+        res = await fast.site.submit_form("/billing", {"number": number}, timeout=5.0)
+    except Exception as e:
+        res = {"error": repr(e)}
+    if not res.get("error"):
+        hits = {h for t in res.get("tables", []) for r in t["rows"] if any(c.strip() == number for c in r["cells"])
+                for _, h in r["links"] if re.fullmatch(r"/billing/invoices/[^/?#]+", h)}
+        if len(hits) == 1:
+            link = hits.pop()
+    pat = {"paths": []}
+    if not link:
+        pat, why = await pick_patient(fast.site, task)
+        if not pat:
+            return no(why)
+    for p in pat["paths"]:
+        pid = p.rstrip("/").split("/")[-1]
+        acct = await fast.site.read(f"/billing/accounts/{pid}", fresh=True)
+        for r in table_rows(acct, "Invoice", "Service date", "Status"):
+            if r.get("Invoice", "").strip() == number:
+                link = next((h for h in r["_links"] if re.fullmatch(r"/billing/invoices/[^/?#]+", h)), None)
+        if link:
+            break
+    if not link:
+        return no(f"invoice {number} not on the patient's account")
+    inv = await fast.site.read(link, fresh=True)
+    text = inv.get("text", "")
+    if f"Invoice {number}" not in text:
+        return no("invoice page does not show that number")
+    st = re.search(r"\nStatus\s*\n\s*([^\n]+)", text)
+    status = st.group(1).strip() if st else ""
+    if re.fullmatch(r"(?i)void(ed)?", status):
+        return "answer", "0.00", {"route": ["solver:invoice", link], "conf": 1.0, "why": "void invoice"}
+    rows = table_rows(inv, "Date", "Description")
+    if not rows:
+        return no("no ledger table")
+    billed = paid = 0.0
+    owed_shown = None
+    for r in rows:
+        desc = r.get("Description", "")
+        if norm(r.get("Date", "")) == "amount owed":
+            owed_shown = _money(desc)
+            continue
+        ch = _money(r.get("Charges", ""))
+        pa = _money(r.get("Payments and adjustments", ""))
+        if ch is not None and pa is None and re.search(r"charge", desc, re.I):
+            billed += ch
+        elif pa is not None and ch is None and re.fullmatch(r"(?i)payment received|payment(\s+\(.*\))?|patient payment|insurance payment", desc.strip()):
+            paid += pa
+        else:
+            return no(f"ledger row not a plain charge or payment: {desc!r}")
+    if billed <= 0:
+        return no("no charge on the ledger")
+    owed = round(billed - paid, 2)
+    if owed_shown is not None and abs(owed_shown - owed) > 0.004:
+        return no(f"ledger total {owed_shown} differs from billed - paid {owed}")
+    if owed < 0:
+        return no(f"credit balance {owed}")
+    return "answer", f"{owed:.2f}", {"route": ["solver:invoice", link], "conf": 1.0,
+                                               "why": f"billed {billed:.2f} paid {paid:.2f} status {status}"}
+
+
+# ------------------------------------------------------------------ lab report of a panel the rule does not cover (v41)
+LAB = re.compile(r"\blab(?:oratory)? (?:report|result)s?\b", re.I)
+LABWORD = re.compile(r"\b(panel|count|profile|screen|culture|a1c|hemoglobin|urinalysis|tsh|psa|ferritin|vitamin|lipid|"
+                     r"metabolic|thyroid|liver|renal|kidney|glucose|cbc|bmp|cmp|electrolytes?|iron|coagulation|hepatic|"
+                     r"lipase|troponin|function|chemistry|hormone|antigen|titer)\b", re.I)
+RECEIVED = re.compile(r"\breceived(?: on| into the chart on)?:? (\d{4}-\d{2}-\d{2})", re.I)
+
+
+def lab_rule(rules):
+    """(covered panels, answer for other panels, [(panel, answer, from date)]) from the clinic's lab messages, or None
+    if they are not worded as in Set 1 (then the model loop decides). Set 1: 6 of its 26 confirmed lab answers were
+    NOT_COVERED, decided by the panel and the received date alone: no page is needed."""
+    base = None
+    for i, t in enumerate(rules.items):
+        m = re.search(r"Panels this rule covers\s*\n+\s*([^\n]+?)\.\s*For a report of any other panel, answer `?([A-Z_]+)`?", t)
+        if m:
+            base = (i, m)   # a later full rule replaces an earlier one
+    if not base:
+        return None
+    i, m = base
+    panels = [p.strip() for p in re.split(r",\s*(?:and\s+)?|\s+and\s+", m.group(1)) if p.strip()]
+    excl = []
+    for later in rules.items[i + 1:]:
+        about_labs = re.search(r"\blab(oratory)? (report|result)s?\b|\b\w+ panel reports?\b", later, re.I) or \
+            any(" " + norm(p) + " " in " " + norm(later) + " " for p in panels)
+        if not about_labs or not re.search(r"\bcover", later, re.I):
+            continue    # chatter, other rules (their "Remittances panel"), or a lab change not about coverage
+        e = re.search(r"\bAn? ([A-Z][A-Za-z0-9 \-]+?) report is not covered by this rule\. Answer `?([A-Z_]+)`? for it", later)
+        d = re.search(r"received on or after (\d{4}-\d{2}-\d{2})", later)
+        if not e or not d or re.search(r"covered again|\bis covered\b|\bnow covered\b", later, re.I) \
+                or len(re.findall(r"\bnot covered\b", later)) != 1:
+            return None   # a coverage change worded some other way
+        excl.append((e.group(1).strip(), e.group(2), dt.date.fromisoformat(d.group(1))))
+    return panels, m.group(2), excl
+
+
+def task_panel(task, panels):
+    """(panel name, covered?) of a lab task, or (None, None)."""
+    low = " " + norm(task) + " "
+    hits = [p for p in panels if " " + norm(p) + " " in low]
+    if hits:
+        return max(hits, key=len), True
+    m = re.search(r"\b(?:the|an?) ([A-Z][A-Za-z0-9\-]*(?: [A-Za-z0-9\-]+){1,4}) lab(?:oratory)? (?:report|result)", task) or \
+        re.search(r"lab(?:oratory)? (?:report|result)s?: [^,]+, ([A-Z][A-Za-z0-9\-]*(?: [A-Za-z0-9\-]+){1,4}), received", task)
+    if not m:
+        return None, None
+    name = m.group(1).strip()
+    initials = {"".join(w[0] for w in p.split()).lower() for p in panels}
+    if name.lower().replace(" ", "") in initials or any(norm(name) in norm(p) or norm(p) in norm(name) for p in panels):
+        return None, None   # an abbreviation or a variant of a covered panel's name: not sure
+    # "What happens to the Billy Nguyen lab report ...": the slot holds a PERSON, not a panel (v41 bug: answered
+    # NOT_COVERED at once = a sure -1). Only a name with a lab word is a panel; anything else goes to the model loop.
+    if not LABWORD.search(name):
+        return None, None
+    from .finder import names_in
+    words = set(norm(name).split())
+    if any(norm(last) in words or norm(first) in words for last, first in names_in(task, [])):
+        return None, None   # the captured words include the patient's name
+    return name, False
+
+
+async def lab_not_covered(fast, task):
+    rule = lab_rule(fast.rules)
+    if not rule:
+        return no("lab rule not found or worded differently")
+    panels, other, excl = rule
+    panel, covered = task_panel(task, panels)
+    if panel is None:
+        return no("panel of the lab task not recognised")
+    if not covered:
+        return "answer", other, {"route": ["solver:lab_panel"], "conf": 1.0, "why": f"{panel!r} not in {panels}"}
+    rec = RECEIVED.search(task)
+    for p, code, since in excl:
+        if norm(p) == norm(panel):
+            if not rec:
+                return no("no received date in the task")
+            if dt.date.fromisoformat(rec.group(1)) >= since:
+                return "answer", code, {"route": ["solver:lab_panel"], "conf": 1.0,
+                                        "why": f"{panel} received {rec.group(1)}: not covered from {since}"}
+    return no(f"{panel} is covered: the report must be read")
+
+
+# ------------------------------------------------------------------ good faith estimate: the insured case (v42)
+GFE = re.compile(r"good[- ]faith estimate|\bGFE\b", re.I)
+PAY_WORDS = re.compile(r"self[- ]?pay|out[- ]of[- ]pocket|\bcash\b|private[- ]pay|uninsured|without (?:using )?insurance|"
+                       r"no insurance|\bnot (?:to )?(?:be )?bill|\b(?:don'?t|do not|won'?t|will not|not) bill|"
+                       r"pay (?:for )?(?:it|this|that|the (?:visit|appointment) )?(?:them|him|her)sel|estimate|price|\bcost",
+                       re.I)
+
+
+def gfe_rule(rules):
+    """The answer for an insured visit from the clinic's good faith estimate message (Set 1: NOT_REQUIRED:INSURED),
+    or None if the rule is worded differently or a later message talks about estimates or insurance."""
+    idx = None
+    for i, t in enumerate(rules.items):
+        if re.search(r"good faith estimate", t, re.I) and len(t) > 800:
+            idx = i
+    if idx is None:
+        return None
+    t = rules.items[idx]
+    m = re.search(r"Otherwise the answer is `?([A-Z][A-Z_]*(?::[A-Z_]+)?)`?", t)
+    if not m or not re.search(r"has to name the date", t) or not re.search(r"no insurance (?:is )?on file", t, re.I):
+        return None
+    if any(re.search(r"estimate|self[- ]?pay|insur", later, re.I) for later in rules.items[idx + 1:]):
+        return None
+    return m.group(1)
+
+
+async def gfe_insured(fast, task):
+    """Only the sure case: the chart is registered with an insurance (a member ID, no 'no insurance' wording) and no
+    note says anything about paying, self-pay, estimates or prices, so no note can make this visit self-pay. Then the
+    rule's answer is its insured code and nothing else applies. Every other case (uninsured, a payment note, the
+    deadline arithmetic) goes to the model loop with the appointment page and the clinic calendar opened."""
+    code = gfe_rule(fast.rules)
+    if not code:
+        return no("good faith estimate rule not found or worded differently")
+    pat, why = await pick_patient(fast.site, task)
+    if not pat:
+        return no(why)
+    ins = await fast.site.read(pat["path"] + "/insurance", all_pages=False)
+    it = ins.get("text", "")
+    if ins.get("error") or len(it) < 40:
+        return no("insurance tab not read")
+    if re.search(r"\bno (?:primary )?insurance|uninsured|self[- ]?pay|not on file", it, re.I):
+        return no("the chart may have no insurance on file: the deadline needs the model")
+    if not re.search(r"\bmember id\b", it, re.I):
+        return no("no member ID on the insurance tab")
+    texts = []
+    for p in pat.get("paths") or [pat["path"]]:
+        nd = await fast.site.read(p + "/notes")
+        if nd.get("error") or incomplete(nd):
+            return no("notes not read completely")
+        texts.append(nd.get("text", ""))
+    hit = PAY_WORDS.search("\n".join(texts))
+    if hit:
+        return no(f"a note mentions {hit.group(0)!r}: the model decides")
+    return "answer", code, {"route": ["solver:gfe", pat["path"] + "/insurance", pat["path"] + "/notes"], "conf": 1.0,
+                            "why": "insured chart, no note about paying"}
+
+
+KINDS = [(COUNT_ANY, provider_counts), (SLOTS, open_slots), (FILING, filing_deadline), (CLAIM, claim_next_step),
+         (INVOICE, invoice_owed), (LAB, lab_not_covered), (GFE, gfe_insured)]
+# tests: FAST_OFF=claim_next_step,... turns hand-written paths off (to exercise the synthesized solvers)
+_off = set(filter(None, __import__("os").environ.get("FAST_OFF", "").split(",")))
+KINDS = [(m, f) for m, f in KINDS if f.__name__ not in _off]

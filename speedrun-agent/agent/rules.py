@@ -28,6 +28,11 @@ MESSAGES:
 """
 
 
+KIND_STOP = set("""what when where which have with they them this that from your their will been were should could
+would about into than then also only each other some such there these those does done need needs please patient
+patients date received today next step decide visit came gotten""".split())
+
+
 def parse_json(text):
     m = re.search(r"\{.*\}", text or "", re.S)
     try:
@@ -143,9 +148,13 @@ class Rules:
                 return None
         return self.ne
 
-    def _ranked(self, task_text):
-        """(score, index) of every long rule message (1200+ chars) for this task, best first. Each shared word of 4+
-        letters weighs log(1 + n/df); a tie goes to the higher index, the newer message."""
+    def for_task(self, task_text, top=2, short_chars=4000):
+        """The messages a model-loop prompt needs: the long rule messages that best fit the task (words weighted by
+        how few messages use them, so 'patient' counts for little and 'tetanus' for a lot) plus the latest short
+        messages (facts, exceptions, changes to a rule), in the order received. Falls back to relevant() when no rule
+        shares a distinctive word with the task."""
+        if not self.items:
+            return "(none yet)"
         toks = [set(re.findall(r"[a-z]{4,}", t.lower())) for t in self.items]
         n = len(toks)
         df = {}
@@ -154,23 +163,7 @@ class Rules:
                 df[w] = df.get(w, 0) + 1
         words = set(re.findall(r"[a-z]{4,}", task_text.lower()))
         longs = [i for i, t in enumerate(self.items) if len(t) >= 1200]
-        return sorted(((sum(math.log(1 + n / df[w]) for w in words & toks[i]), i) for i in longs), reverse=True)
-
-    def kind_for(self, task_text):
-        """REUSE-01: the kind of a task is the rule message it best matches, as its 1-based number, or 0 for none.
-        Short messages (facts, chatter, rule changes) never become kinds."""
-        scored = self._ranked(task_text)
-        return scored[0][1] + 1 if scored and scored[0][0] > 0 else 0
-
-    def for_task(self, task_text, top=2, short_chars=4000):
-        """The messages a model-loop prompt needs: the long rule messages that best fit the task (words weighted by
-        how few messages use them, so 'patient' counts for little and 'tetanus' for a lot) plus the latest short
-        messages (facts, exceptions, changes to a rule), in the order received. Falls back to relevant() when no rule
-        shares a distinctive word with the task."""
-        if not self.items:
-            return "(none yet)"
-        scored = self._ranked(task_text)
-        longs = {i for _, i in scored}
+        scored = sorted(((sum(math.log(1 + n / df[w]) for w in words & toks[i]), i) for i in longs), reverse=True)
         if not scored or scored[0][0] <= 0:
             return self.relevant(task_text)
         keep = {i for s, i in scored[:top] if s >= scored[0][0] * 0.5}
@@ -180,6 +173,30 @@ class Rules:
                 keep.add(i)
                 budget -= len(self.items[i])
         return "\n\n".join(f"[Message {i + 1}]\n{self.items[i]}" for i in sorted(keep))
+
+    def kind_of(self, task_text):
+        """The long rule message this task belongs to ("rule3"), or None. Tasks of one kind are worded in many ways
+        ("Please decide what to do with the ... lab report" / "Next step for a lab report: ..."), but they share
+        the rare words of their rule (panel names, "triage", "tetanus"), so this groups them where word overlap
+        between tasks did not."""
+        if not self.items:
+            return None
+        toks = [set(re.findall(r"[a-z]{4,}", t.lower())) for t in self.items]
+        n = len(toks)
+        df = {}
+        for ts in toks:
+            for w in ts:
+                df[w] = df.get(w, 0) + 1
+        words = set(re.findall(r"[a-z]{4,}", task_text.lower())) - KIND_STOP
+        longs = [i for i, t in enumerate(self.items) if len(t) >= 1200]
+        scored = sorted(((sum(math.log(1 + n / df[w]) for w in words & toks[i]), i) for i in longs), reverse=True)
+        # v41: only for tasks no playbook category fits (agent/kinds.py), and stricter: v40 put invoice tasks under
+        # the lab rule and count tasks under the tetanus rule on two shared words, then wrote those kinds off
+        if not scored or scored[0][0] < (3.0 if n >= 4 else 2.0):   # few messages: every word is "rare"
+            return None
+        if len(scored) > 1 and scored[1][0] > 0.8 * scored[0][0]:
+            return None    # two rules fit about as well: not sure which kind
+        return f"rule{scored[0][1]}"
 
     def relevant(self, task_text, max_chars=16000):
         """Messages for a prompt, in order. If too long, keep those sharing the most words with the task."""

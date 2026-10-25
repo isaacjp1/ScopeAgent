@@ -15,9 +15,11 @@ import asyncio
 import io
 import re
 import time
-from urllib.parse import urlsplit
+
+from playwright.async_api import async_playwright
 
 from . import config
+from .llm import BACKGROUND
 
 # Runs in one frame. Returns its text with every table rendered as pipe rows that carry their links, so the model
 # can tell which "Jones, Carol" link belongs to which date of birth.
@@ -167,67 +169,14 @@ LOCATION_DEBUG_JS = r"""
 }
 """
 
-SHOWING = re.compile(r"Showing\s+([\d,]+)\s+(?:to|-|–)\s+([\d,]+)\s+of\s+([\d,]+)", re.I)
+SUSPENDED = re.compile(r"account (is )?suspended|cannot use Wrenfield with this account", re.I)
+SUSPENDED_ERR = "account suspended for a moment: no pages can be read now (answer from what you have, or skip)"
+SHOWING = re.compile(r"Showing\s+([\d,]+)\s+(?:to|-|–)\s+([\d,]+)\s+of\s+(?:about\s+)?([\d,]+)", re.I)   # Set 1: "of about 200 patients"
+SHOWMORE = re.compile(r"Showing\s+([\d,]+)\s+of\s+(?:about\s+)?([\d,]+)", re.I)   # "Showing 20 of 31 documents" + Show more
 
 
 def _int(s):
     return int(str(s).replace(",", ""))
-
-
-def same_origin(url):
-    """Rule 1: the browser may reach only SITE_URL (same scheme, host and port); data:, blob: and about: never leave the box."""
-    def origin(s):   # Chromium reports hosts in lower case and drops a default port: compare normalised parts
-        u = urlsplit(s)
-        return u.scheme, u.hostname, u.port or {"http": 80, "https": 443}.get(u.scheme)
-    try:
-        return urlsplit(url).scheme in ("data", "blob", "about") or origin(url) == origin(config.SITE_URL)
-    except ValueError:   # a port that is not a number in 0-65535
-        return False
-
-
-# Sidebar label (lower case) -> the path the practice clinic uses for that section. The agent's code and notes.md are
-# written against these paths; Site translates them to this clinic's paths at the browser (ROB-02).
-SECTIONS = {"patients": "/patients", "schedule": "/schedule", "billing": "/billing", "documents": "/documents"}
-
-
-def learn_routes(links):
-    """{practice section path: this clinic's path} from the navigation links labelled Patients, Schedule, Billing,
-    Documents; the first link per label wins."""
-    # limit: exact sidebar labels only; add synonyms ("Charts", "Calendar") if a Set 1 log shows a clinic without them
-    routes = {}
-    for label, href in links:
-        practice = SECTIONS.get(" ".join((label or "").split()).lower())
-        if not practice or practice in routes or not href:
-            continue
-        if href.startswith("http"):
-            if not same_origin(href):   # Rule 1: never learn a route that leaves SITE_URL
-                continue
-            href = urlsplit(href).path
-        elif not href.startswith("/") or href.startswith("//"):
-            continue
-        path = re.split(r"[?#]", href, maxsplit=1)[0].rstrip("/")
-        if path:   # the root is not a section
-            routes[practice] = path
-    return routes
-
-
-# limit: only the four section roots are translated; sub-paths (chart tabs, /schedule/providers,
-# /schedule/appointments) keep their practice names until a version that renames them shows up in a Set 1 log
-def _swap(path, pairs):
-    for a, b in pairs:
-        if path == a or path.startswith(a + "/") or path.startswith(a + "?"):
-            return b + path[len(a):]
-    return path
-
-
-def to_site(path, routes):
-    """A practice path rewritten to this clinic's path (unchanged outside the learned sections)."""
-    return _swap(path, routes.items())
-
-
-def from_site(href, routes):
-    """A path of this clinic rewritten to the practice path the agent's code expects."""
-    return _swap(href, [(real, practice) for practice, real in routes.items()])
 
 
 class Site:
@@ -237,9 +186,9 @@ class Site:
         self.ctx = None
         self.pages = asyncio.Queue()
         self.cache = {}           # path -> rendered dict
+        self.found_cache = {}     # task text -> patient found by agent/finder.py (v40)
         self.cache_t = {}         # path -> when it was read: the clinic's data changes during the shift
         self.nav_links = set()    # hrefs that appear on every page (sidebar): hidden from the model
-        self.routes = {}          # practice section path -> this clinic's path, learned from the sidebar at startup; empty = practice paths
         self.ready = asyncio.Event()
         self.error = None
         self.inflight = {}        # page -> number of requests in flight
@@ -259,13 +208,15 @@ class Site:
         self.login_lock = asyncio.Lock()
         self.last_login = 0.0
         self.relogins = 0
-        self.blocked = set()      # hosts the browser was stopped from reaching, printed once each; kept across retries
-        # startup state for the DIAG-01 probe
-        self.signed_in = False
-        self.startup = {}
-        self.search_hits = 0
-        self.search_misses = 0
-        self.dob_searches = set()
+        self.nav_rate = config.NAV_PER_WINDOW   # page loads allowed per NAV_WINDOW (adaptive, see pace)
+        self._nav = []            # (time, background) of recent page loads
+        self._fg_wait = 0         # task page loads waiting in pace (background loads let them go first)
+        self._good = 0            # good loads since the last rate change
+        self._slowed_at = 0.0
+        self._susp_at = 0.0
+        self.suspended_until = 0.0
+        self.suspensions = 0
+        self._susp_streak = 0
 
     # ---------- startup ----------
     async def start(self):
@@ -280,52 +231,21 @@ class Site:
             self.pages = asyncio.Queue()
             self.inflight = {}
             await asyncio.sleep(2)
-        # a snapshot, because _relogin resets location_ok mid-shift
-        self.startup = {"signed_in": self.signed_in and not self.error, "location_ok": self.location_ok and not self.error}
-        if not self.startup["signed_in"]:
-            why = f" ({self.error[:150]})" if self.error else ""
-            print(f"[degraded] sign-in: not confirmed{why}; tasks keep running, and a read that lands on a sign-in page "
-                  "signs in again (at most 4 times a shift)", flush=True)
-        if not self.startup["location_ok"]:
-            print("[degraded] location: All locations not confirmed; patients are also looked up through the documents "
-                  "and billing lists, and new/established answers wait for a confirmed switch", flush=True)
         self.ready.set()
 
     async def _start_once(self):
         try:
-            # Imported here: a missing or broken Playwright is then a caught startup failure like any other, and the
-            # logic tests can import this module without Playwright (same lazy pattern as pypdf in pdf_text).
-            from playwright.async_api import async_playwright
             t0 = time.time()
             self.pw = await async_playwright().start()
             self.browser = await self.pw.chromium.launch(
                 headless=True,
                 args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
             )
-            # service_workers="block": context routes do not see requests a service worker handles.
-            self.ctx = await self.browser.new_context(viewport={"width": 1400, "height": 1000}, service_workers="block")
+            self.ctx = await self.browser.new_context(viewport={"width": 1400, "height": 1000})
             self.ctx.set_default_timeout(config.NAV_TIMEOUT * 1000)
-
-            async def _guard(route):
-                if same_origin(route.request.url):
-                    return await route.continue_()
-                host = urlsplit(route.request.url).netloc
-                if host not in self.blocked:
-                    self.blocked.add(host)
-                    print(f"[site] blocked a request to {host} (Rule 1)", flush=True)
-                await route.abort()
-            # Rule 1 guard on the context, before the first tab: it covers every pooled tab, popup and frame.
-            # Do NOT block fonts or images: the anti-bot check hashes the rendered layout, which depends on fonts
-            # (everything on the SITE_URL origin passes).
-            # limit: a redirect from SITE_URL to another host is followed without calling the handler again (Playwright routes the original request only); the judge network refuses other hosts
-            await self.ctx.route("**/*", _guard)
+            # Do NOT block fonts or images: the anti-bot check hashes the rendered layout, which depends on fonts.
             first = await self._new_page()
-            # Degraded, not dead: an open site, or a read that lands on the sign-in page and signs in again through
-            # _relogin, still works; only a browser failure (caught by the outer except) ends the attempt.
-            try:
-                await self._login(first)
-            except Exception as e:
-                print(f"[site] sign-in failed: {e!r}"[:200], flush=True)
+            await self._login(first)
             self.last_login = time.time()
             try:
                 if await self._wait_content(first, seconds=4):
@@ -338,10 +258,8 @@ class Site:
             extra = await asyncio.gather(*[self._new_page() for _ in range(max(0, config.PAGE_POOL - 1))])
             for p in extra:
                 self.pages.put_nowait(p)
-            # navigation learned from the dashboard: what Phase 2 (ROB-02) needs to know about an unseen clinic
-            nav = sorted({h.split("?")[0] for _, h in self.cache.get("/", {}).get("links", []) if h.startswith("/")})
-            print(f"[site] ready in {time.time() - t0:.1f}s  sign-in={self.signed_in} location_ok={self.location_ok} "
-                  f"today={self.today!r} nav={len(nav)} {nav[:25]}", flush=True)
+            print(f"[site] ready in {time.time() - t0:.1f}s  location_ok={self.location_ok} today={self.today!r}",
+                  flush=True)
         except Exception as e:  # keep the agent alive; tasks will be skipped
             self.error = repr(e)
             print(f"[site] startup failed: {e!r}", flush=True)
@@ -376,9 +294,7 @@ class Site:
 
     async def _login(self, page):
         """Sign in. Clinic versions differ: the form may live at /login, or / may redirect to it under another name."""
-        self.signed_in = False   # a later startup attempt never inherits an earlier attempt's result
         fr = pw_el = None
-        named = False
         for path, secs in (("/login", 6), ("/", 4)):
             try:
                 await page.goto(config.SITE_URL + path, wait_until="commit")
@@ -388,27 +304,8 @@ class Site:
             fr, pw_el = await self._find_frame(page, "input[type=password]", seconds=secs)
             if pw_el:
                 break
-            # Two-step sign-in: the user name first, the password on the next page. Only on a sign-in URL, so
-            # credentials never go into an app page (the practice clinic's /login sends visitors straight into the app).
-            if self._is_login_page({}, page.url):
-                _, name_el = await self._find_frame(
-                    page, "input[type=email], input[autocomplete=username], input[name*=user i], input[name*=email i], "
-                          "input[type=text]", seconds=1)
-                if name_el:
-                    await name_el.fill(config.SITE_USERNAME)
-                    named = True
-                    try:
-                        await name_el.press("Enter", timeout=config.NAV_TIMEOUT * 3000)
-                    except Exception as e:
-                        print(f"[site] sign-in name step: {e!r}"[:200], flush=True)
-                    fr, pw_el = await self._find_frame(page, "input[type=password]", seconds=secs)
-                    if pw_el:
-                        break
         if not pw_el:
             print(f"[site] no login form (already signed in or open site), at {page.url}", flush=True)
-            # an open site such as practice counts as signed in; a page that never loaded, or a sign-in page with no
-            # password field, does not
-            self.signed_in = page.url.startswith(config.SITE_URL) and not self._is_login_page({}, page.url)
             return
         user_el = None
         for sel in ["input[type=email]", "input[autocomplete=username]", "input[name*=user i]", "input[id*=user i]",
@@ -417,21 +314,15 @@ class Site:
             user_el = await fr.query_selector(sel)
             if user_el:
                 break
-        if user_el and not named:   # after a name step a user field here may be hidden, and fill would wait on it
+        if user_el:
             await user_el.fill(config.SITE_USERNAME)
         await pw_el.fill(config.SITE_PASSWORD)
-        # The press waits for the sign-in POST's navigation under the 12 s context default: a 15 s sign-in raised here
-        # and failed all 3 startup attempts (Phase 1 deferred item). 3 x NAV_TIMEOUT covers a slow clinic; a dead
-        # site still fails fast at goto.
-        try:
-            await pw_el.press("Enter", timeout=config.NAV_TIMEOUT * 3000)
-        except Exception as e:
-            print(f"[site] sign-in submit still waiting: {e!r}"[:200], flush=True)
+        await pw_el.press("Enter")
         for fallback in range(3):
             end = time.time() + 2.5
-            while time.time() < end and self._is_login_page({}, page.url):
+            while time.time() < end and "/login" in page.url:
                 await asyncio.sleep(0.1)
-            if not self._is_login_page({}, page.url):
+            if "/login" not in page.url:
                 break
             try:
                 if fallback == 0:
@@ -443,7 +334,6 @@ class Site:
             except Exception:
                 pass
         still = await self._find_frame(page, "input[type=password]", seconds=0.5)
-        self.signed_in = not still[1] and not self._is_login_page({}, page.url)
         print(f"[site] signed in, now at {page.url}" + (" (WARNING: a password field is still shown)" if still[1] else ""),
               flush=True)
 
@@ -506,7 +396,7 @@ class Site:
     async def _all_locations(self, page):
         """Patient search and charts are scoped to the working location. Switch to All locations with real
         (trusted) clicks, then check the switcher really says so. The switch is a POST plus a reload."""
-        if self._is_login_page({}, page.url) or page.url == "about:blank":
+        if "/login" in page.url or page.url == "about:blank":
             await page.goto(config.SITE_URL + "/", wait_until="commit")
         await self._wait_content(page)
         for attempt in range(4):
@@ -603,17 +493,7 @@ class Site:
         try:
             await page.goto(config.SITE_URL + "/", wait_until="commit")
             await self._wait_content(page)
-            self.routes = {}   # a startup retry: _extract below must not map, so the one _map_links here is the only pass
             data = await self._extract(page)
-            # _extract reads only the content frames; the sidebar that names the sections lives in the shell
-            try:
-                shell = (await page.main_frame.evaluate(EXTRACT_JS) or {}).get("links", [])
-            except Exception:
-                shell = []
-            data["links"] = [l for l in shell if l not in data["links"]] + data["links"]
-            self.routes = learn_routes(data["links"])
-            self._map_links(data)
-            print(f"[site] routes from navigation: {self.routes}", flush=True)
             m = re.search(r"\b([A-Z][a-z]{2,8}\.? \d{1,2}, \d{4})\b", data["text"])
             if m:
                 self.today = m.group(1)
@@ -684,17 +564,7 @@ class Site:
                     out["links"].append(l)
             for k in ("forms", "selects", "media", "files", "tables"):
                 out[k] += d.get(k, [])
-        self._map_links(out)
         return out
-
-    def _map_links(self, data):
-        """Links and table-row links in the practice vocabulary, so solver regexes such as '^/patients/' match."""
-        if not self.routes:
-            return
-        data["links"] = [[t, from_site(h, self.routes)] for t, h in data["links"]]
-        for t in data["tables"]:
-            for r in t["rows"]:
-                r["links"] = [[x, from_site(h, self.routes)] for x, h in r["links"]]
 
     def _normalize(self, path):
         path = (path or "/").strip()
@@ -708,8 +578,15 @@ class Site:
 
     async def read(self, path, all_pages=True, fresh=False):
         path = self._normalize(path)
-        if not fresh and path in self.cache and time.time() - self.cache_t.get(path, 0) < config.CACHE_SECONDS:
+        # v48: stable pages (charts, documents, payers, lots) are kept 4 min; billing and schedule pages change
+        # during the shift (payments posted, cancellations) and keep the short 45 s
+        ttl = 45 if re.search(r"/billing|/schedule|/appointments|/claims", path) else config.CACHE_SECONDS
+        if not fresh and path in self.cache and time.time() - self.cache_t.get(path, 0) < ttl:
             return self.cache[path]
+        # While the account is suspended, fail at once (v29). v28 waited here, and a task's open_pages sat for
+        # 369 s (Set 1 i078) while the queue stood still; v25 failed fast and reached every task.
+        if self.is_suspended():
+            return {"path": path, "error": SUSPENDED_ERR}
         await self.ready.wait()
         if self.error and self.pages.empty():
             return {"path": path, "error": "browser not available: " + self.error}
@@ -720,10 +597,9 @@ class Site:
                     if self.login_lock.locked():   # a re-login is running: wait, so nothing is read from the old session
                         async with self.login_lock:
                             pass
-                    await page.goto(config.SITE_URL + to_site(path, self.routes), wait_until="commit")
-                    # A sparse sign-in page never counts as content, so waiting first spent 4 x NAV_TIMEOUT per read
-                    # before the sign-in check below: signed-out reads never returned within a task (Plan 01-03).
-                    if not self._is_login_page({}, page.url) and not await self._wait_content(page):
+                    await self.pace()
+                    await page.goto(config.SITE_URL + path, wait_until="commit")
+                    if not await self._wait_content(page):
                         continue
                     data = await self._extract(page)
                     if "is not responding" in data["text"][:300]:
@@ -732,8 +608,12 @@ class Site:
                             (len(data["text"]) < 500 and TRANSIENT.search(data["text"])):
                         # never cache or hand back a 503 page: it reads as an empty chart, list or schedule
                         print(f"[site] {path}: {(data.get('title') or data['text'][:60])!r}, retrying", flush=True)
+                        self.slow_down(path)
                         await asyncio.sleep(0.6 * (attempt + 1))
                         continue
+                    if SUSPENDED.search((data.get("title") or "") + " " + data["text"][:400]):
+                        self.suspended(path)
+                        return {"path": path, "error": SUSPENDED_ERR}
                     if await self._pass_notice(page, data):
                         continue
                     if self._is_login_page(data, page.url) and not re.search(r"log ?in|sign ?in", path, re.I):
@@ -741,8 +621,24 @@ class Site:
                             continue
                         return {"path": path, "error": "signed out and could not sign in again"}
                     m = SHOWING.search(data["text"])
+                    more = SHOWMORE.search(data["text"])
+                    if all_pages and not m and more and _int(more.group(1)) < _int(more.group(2)):
+                        # documents list: "Showing 20 of 31 documents" + a "Show more" button (v40)
+                        if _int(more.group(2)) <= config.LIST_ROWS_LIMIT:
+                            data = await self._show_more(page, path, data)
+                        else:
+                            data["incomplete"] = (f"only {more.group(1)} of {more.group(2)} rows shown "
+                                                  f"(too many: narrow the filter)")
                     if all_pages and m and _int(m.group(2)) < _int(m.group(3)):
-                        data = await self._all_rows(page, path, data)
+                        if _int(m.group(3)) > config.LIST_ROWS_LIMIT:
+                            # thousands of rows (a prefix search): paging them all got the account suspended in
+                            # v25. Keep page 1 and say so; the caller narrows the search (first name, DOB) instead.
+                            data["incomplete"] = (f"only rows {m.group(1)} to {m.group(2)} of {m.group(3)} shown "
+                                                  f"(too many to page through: narrow the search)")
+                        else:
+                            data = await self._all_rows(page, path, data)
+                    self._susp_streak = 0
+                    self.page_ok()
                     data["path"] = path
                     data["final_url"] = page.url
                     self.cache[path] = data
@@ -754,6 +650,74 @@ class Site:
             return {"path": path, "error": "page did not load"}
         finally:
             self.pages.put_nowait(page)
+
+    # ---------- rate limit ----------
+    async def pace(self):
+        """Adaptive page rate, all tabs together (v29): starts at NAV_PER_WINDOW loads per NAV_WINDOW s, halves on a
+        503/429 (floor NAV_MIN), +1 after every NAV_RAMP_EVERY good loads, back to the floor after a suspension.
+        Background work (BACKGROUND set: synthesis, the start-up provider read) gets at most NAV_BG_SHARE of the rate
+        and waits while a task's load is waiting. v28 Set 1: a burst (start-up walk over ~80 provider pages, two
+        explorers, the tasks) drew 503s, then two suspensions."""
+        bg = BACKGROUND.get()
+        if not bg:
+            self._fg_wait += 1
+        try:
+            while True:
+                now = time.time()
+                self._nav = [(t, b) for t, b in self._nav if now - t < config.NAV_WINDOW]
+                rate = max(1, int(self.nav_rate))
+                ok = len(self._nav) < rate
+                if bg:
+                    ok = ok and self._fg_wait == 0 and \
+                        sum(1 for _, b in self._nav if b) < max(1.0, rate * config.NAV_BG_SHARE)
+                if ok:
+                    self._nav.append((now, bg))
+                    return
+                wait = self._nav[0][0] + config.NAV_WINDOW - now + 0.01 if self._nav else 0.1
+                await asyncio.sleep(min(max(0.05, wait), 0.5))
+        finally:
+            if not bg:
+                self._fg_wait -= 1
+
+    def slow_down(self, path):
+        """A 503 / 429 is the clinic's warning before it suspends: halve the page rate (once per burst)."""
+        now = time.time()
+        if now - self._slowed_at < 3 or self.nav_rate <= config.NAV_MIN:
+            return
+        old = self.nav_rate
+        self.nav_rate = max(config.NAV_MIN, old // 2)
+        self._slowed_at, self._good = now, 0
+        print(f"[site] {path}: busy, page rate {old} -> {self.nav_rate} per {config.NAV_WINDOW:.0f}s", flush=True)
+
+    def page_ok(self):
+        self._good += 1
+        if self._good >= config.NAV_RAMP_EVERY and self.nav_rate < config.NAV_PER_WINDOW:
+            self.nav_rate += 1
+            self._good = 0
+
+    def suspended(self, path):
+        """One back-off per suspension event: tabs that see the suspended page while one is set (or within 5 s of
+        the last one) add nothing. v28 Set 1: 16 detections in 2 events, the back-off climbing to 120 s."""
+        now = time.time()
+        if self.is_suspended() or now - self._susp_at < 5:
+            return
+        self._susp_at = now
+        self.suspensions += 1
+        # v40: a flat back-off (v29 grew it to 120 s per event and the queue stood still for minutes on Set 3);
+        # the next read after it tells whether the suspension is still on
+        back = config.SUSPEND_BACKOFF
+        self._susp_streak += 1
+        self.suspended_until = now + back
+        self.nav_rate, self._good = max(config.NAV_MIN, int(self.nav_rate) // 2), 0
+        print(f"[site] ACCOUNT SUSPENDED on {path}: no site reads for {back:.0f}s (#{self.suspensions}); "
+              f"page rate back to {self.nav_rate} per {config.NAV_WINDOW:.0f}s", flush=True)
+
+    def is_suspended(self):
+        return time.time() < getattr(self, "suspended_until", 0)
+
+    async def wait_unsuspended(self):
+        while self.is_suspended():
+            await asyncio.sleep(max(0.2, self.suspended_until - time.time()))
 
     # ---------- lists that span several pages ----------
     async def _click_in_frames(self, page, kind, name_re):
@@ -816,6 +780,9 @@ class Site:
                 m = SHOWING.search(pages[-1]["text"])
                 if not m or _int(m.group(2)) >= _int(m.group(3)):
                     break
+                if len(pages) >= config.LIST_MAX_PAGES:
+                    break    # long lists got the account suspended in v25: the caller narrows the search instead
+                await self.pace()
                 ok = await self._click_in_frames(page, "button", re.compile(r"^\s*Next\s*$", re.I)) or \
                     await self._click_in_frames(page, "link", re.compile(r"^\s*Next\s*$", re.I))
                 if not ok:
@@ -853,10 +820,155 @@ class Site:
                 print(f"[site] {path}: read all {m.group(3) if m else '?'} rows over {len(pages)} page(s)", flush=True)
             return merged
 
+    async def _show_more(self, page, path, data):
+        """Click "Show more" until every row of the list is shown (at most SHOW_MORE_MAX clicks)."""
+        async with self.list_lock:
+            for _ in range(config.SHOW_MORE_MAX):
+                m = SHOWMORE.search(data["text"])
+                if not m or _int(m.group(1)) >= _int(m.group(2)):
+                    break
+                await self.pace()
+                ok = await self._click_in_frames(page, "button", re.compile(r"^\s*Show more\s*$", re.I)) or \
+                    await self._click_in_frames(page, "link", re.compile(r"^\s*Show more\s*$", re.I))
+                if not ok:
+                    break
+                nxt = await self._after_more(page, data["text"])
+                m2 = SHOWMORE.search(nxt["text"])
+                if not m2 or m2.groups() == m.groups():
+                    break
+                data = nxt
+            m = SHOWMORE.search(data["text"])
+            if m and _int(m.group(1)) < _int(m.group(2)):
+                data["incomplete"] = f"only {m.group(1)} of {m.group(2)} rows could be shown"
+            print(f"[site] {path}: show more -> {m.group(0) if m else '?'}", flush=True)
+            return data
+
+    async def _after_more(self, page, before_text):
+        end = time.time() + 5
+        await asyncio.sleep(0.12)
+        while time.time() < end:
+            await self._wait_content(page, seconds=max(0.5, end - time.time()))
+            data = await self._extract(page)
+            m1, m0 = SHOWMORE.search(data["text"]), SHOWMORE.search(before_text)
+            if m1 and (not m0 or m1.groups() != m0.groups()):
+                return data
+            await asyncio.sleep(0.12)
+        return await self._extract(page)
+
+    async def walk_list(self, path, stop, max_pages=None):
+        """Read a server-paged list page by page (largest page size first) until stop(page_data) is True or the
+        list ends. For sorted lists (the patient search: last name, then first name) the caller stops as soon as
+        the wanted row is found or passed, so a 300-row search costs a few pages, not all of them. Returns the
+        pages read (each a page dict), or [] on error. Never pages while the account is suspended."""
+        max_pages = max_pages or config.NAME_LIST_MAX_PAGES
+        path = self._normalize(path)
+        if self.is_suspended():
+            return []
+        await self.ready.wait()
+        page = await self.pages.get()
+        out = []
+        try:
+            async with self.list_lock:
+                await self.pace()
+                await page.goto(config.SITE_URL + path, wait_until="commit")
+                if not await self._wait_content(page):
+                    return []
+                data = await self._extract(page)
+                if SUSPENDED.search((data.get("title") or "") + " " + data["text"][:400]):
+                    self.suspended(path)
+                    return []
+                if TRANSIENT.search(data.get("title") or "") or (len(data["text"]) < 500 and TRANSIENT.search(data["text"])):
+                    self.slow_down(path)
+                    return []
+                # largest rows-per-page option
+                for fr in page.frames:
+                    try:
+                        sel = fr.locator("select").filter(has=fr.locator("option", has_text=re.compile("per page", re.I)))
+                        if await sel.count():
+                            labels = [t.strip() for t in await sel.first.locator("option").all_inner_texts()]
+                            nums = [(int(re.search(r"\d+", t).group()), t) for t in labels if re.search(r"\d+", t)]
+                            if nums:
+                                best = max(nums)[1]
+                                cur = await sel.first.evaluate("s => s.options[s.selectedIndex] ? s.options[s.selectedIndex].text.trim() : ''")
+                                if cur != best:
+                                    await self.pace()
+                                    await sel.first.select_option(label=best)
+                                    data = await self._after_action(page, data["text"])
+                            break
+                    except Exception as e:
+                        print(f"[site] page size change failed on {path}: {e!r}"[:200], flush=True)
+                m = SHOWING.search(data["text"])
+                if m and _int(m.group(1)) > 1:
+                    if await self._click_in_frames(page, "button", re.compile(r"^\s*1\s*$")) or \
+                            await self._click_in_frames(page, "link", re.compile(r"^\s*1\s*$")):
+                        data = await self._after_action(page, data["text"])
+                data["path"] = path
+                out.append(data)
+                for _ in range(max_pages - 1):
+                    if stop(data):
+                        break
+                    m = SHOWING.search(data["text"])
+                    more = SHOWMORE.search(data["text"])
+                    if not m and more and _int(more.group(1)) < _int(more.group(2)):
+                        # a "Show more" list: each click appends rows to the same page
+                        await self.pace()
+                        ok = await self._click_in_frames(page, "button", re.compile(r"^\s*Show more\s*$", re.I)) or \
+                            await self._click_in_frames(page, "link", re.compile(r"^\s*Show more\s*$", re.I))
+                        if not ok:
+                            break
+                        nxt = await self._after_more(page, data["text"])
+                        m2 = SHOWMORE.search(nxt["text"])
+                        if not m2 or m2.groups() == more.groups():
+                            break
+                        nxt["path"] = path
+                        data = nxt
+                        out[-1] = data
+                        continue
+                    if not m or _int(m.group(2)) >= _int(m.group(3)):
+                        break
+                    await self.pace()
+                    ok = await self._click_in_frames(page, "button", re.compile(r"^\s*Next\s*$", re.I)) or \
+                        await self._click_in_frames(page, "link", re.compile(r"^\s*Next\s*$", re.I))
+                    if not ok:
+                        break
+                    nxt = await self._after_action(page, data["text"])
+                    m2 = SHOWING.search(nxt["text"])
+                    if not m2 or m2.groups() == m.groups():
+                        break
+                    if SUSPENDED.search((nxt.get("title") or "") + " " + nxt["text"][:400]):
+                        self.suspended(path)
+                        break
+                    nxt["path"] = path
+                    data = nxt
+                    out.append(data)
+                self.page_ok()
+                last = SHOWING.search(data["text"]) or SHOWMORE.search(data["text"])
+                print(f"[site] walk {path}: {len(out)} page(s), at {last.group(0) if last else '?'}", flush=True)
+                return out
+        except Exception as e:
+            print(f"[site] walk {path} failed: {e!r}"[:200], flush=True)
+            return out
+        finally:
+            self.pages.put_nowait(page)
+
     # ---------- documents ----------
     async def read_document(self, path):
-        """Open a document page, find its file (Download link) and return the PDF's text."""
-        data = await self.read(path)
+        """Open a document page, find its file (Download link) and return the PDF's text.
+        One document at a time, from a freshly opened page: the clinic serves the file of the document the session
+        has open, so two documents opened at once (v22 context pack) both came back as 0-byte downloads."""
+        if not hasattr(self, "_doc_lock"):
+            self._doc_lock = asyncio.Lock()
+        async with self._doc_lock:
+            for attempt in range(2):
+                out = await self._read_document(path, fresh=attempt > 0 or path in self.cache)
+                if out.get("text") or out.get("error"):
+                    return out
+            return out
+
+    async def _read_document(self, path, fresh=False):
+        if "doctext:" + path in self.cache:
+            return dict(self.cache["doctext:" + path])
+        data = await self.read(path, fresh=fresh)
         if data.get("error"):
             return {"path": path, "error": data["error"]}
         files = data.get("files") or []
@@ -866,8 +978,6 @@ class Site:
             if not href:
                 continue
             url = href if href.startswith("http") else config.SITE_URL + (href if href.startswith("/") else "/" + href)
-            if not same_origin(url):   # ctx.request may bypass the context route: check the host here (Rule 1)
-                continue
             key = "file:" + url
             if key in self.cache:
                 out["text"] = self.cache[key]
@@ -895,17 +1005,22 @@ class Site:
         if not out["text"]:
             out["note"] = ("No file text found. Use look_at_page on this path to see the document image."
                            if data.get("media") else "No file found on this page.")
+        else:
+            self.cache["doctext:" + path] = dict(out)
         return out
 
     async def look(self, path, max_images=3):
         """Screenshots of a page's visual content (scanned letters, PDFs, images) as JPEG data URLs."""
         import base64
         path = self._normalize(path)
+        if self.is_suspended():
+            return []
         await self.ready.wait()
         page = await self.pages.get()
         shots = []
         try:
-            await page.goto(config.SITE_URL + to_site(path, self.routes), wait_until="commit")
+            await self.pace()
+            await page.goto(config.SITE_URL + path, wait_until="commit")
             await self._wait_content(page)
             await asyncio.sleep(0.3)  # let images decode
             els = []
@@ -935,11 +1050,14 @@ class Site:
     async def screenshot(self, path, height=1400):
         """JPEG data URL of the page as rendered (CDP capture: does not wait on fonts/animations)."""
         path = self._normalize(path)
+        if self.is_suspended():
+            return None
         await self.ready.wait()
         page = await self.pages.get()
         try:
             await page.set_viewport_size({"width": 1400, "height": height})
-            await page.goto(config.SITE_URL + to_site(path, self.routes), wait_until="commit")
+            await self.pace()
+            await page.goto(config.SITE_URL + path, wait_until="commit")
             await self._wait_content(page)
             await asyncio.sleep(0.4)  # let web fonts paint (digits are drawn by the page's font)
             cdp = await page.context.new_cdp_session(page)
@@ -958,6 +1076,96 @@ class Site:
 
     async def read_many(self, paths):
         return await asyncio.gather(*[self.read(p) for p in paths])
+
+    async def submit_form(self, path, fields, timeout=8.0):
+        """Fill a page's form fields (by name) INSIDE the content frame and submit it, like a person would.
+        v40 Set 1: several filters are ignored when put on the shell's URL (/billing?number=, /vaccines?lot=,
+        /vaccines/notes?words=, /documents?patient=, /claims?patient=): the forms live in the nested frame, so the
+        shell never passes those parameters on. Returns the page after the submit (not cached)."""
+        path = self._normalize(path)
+        key = "form:" + path + "|" + "&".join(f"{k}={v}" for k, v in sorted(fields.items()))
+        if key in self.cache and time.time() - self.cache_t.get(key, 0) < config.CACHE_SECONDS:
+            return self.cache[key]
+        if self.is_suspended():
+            return {"path": path, "error": SUSPENDED_ERR}
+        await self.ready.wait()
+        page = await self.pages.get()
+        try:
+            await self.pace()
+            await page.goto(config.SITE_URL + path, wait_until="commit")
+            if not await self._wait_content(page):
+                return {"path": path, "error": "page did not load"}
+            before = await self._extract(page)
+            if SUSPENDED.search((before.get("title") or "") + " " + before["text"][:400]):
+                self.suspended(path)
+                return {"path": path, "error": SUSPENDED_ERR}
+            frames = [f for f in page.frames if f != page.main_frame] + [page.main_frame]
+            target, last_el = None, None
+            for fr in frames:
+                try:
+                    els = {}
+                    for name in fields:
+                        el = await fr.query_selector(f'[name="{name}"]')
+                        if not el:
+                            break
+                        els[name] = el
+                    if len(els) == len(fields):
+                        target = (fr, els)
+                        break
+                except Exception:
+                    continue
+            if not target:
+                return {"path": path, "error": f"no form with fields {list(fields)} on this page; its forms: "
+                                                f"{' / '.join(before.get('forms', []))[:600]}"}
+            fr, els = target
+            for name, el in els.items():
+                tag = (await el.evaluate("e => e.tagName")).lower()
+                val = str(fields[name])
+                if tag == "select":
+                    try:
+                        await el.select_option(value=val)
+                    except Exception:
+                        await el.select_option(label=val)
+                else:
+                    await el.fill(val)
+                last_el = el
+            await self.pace()
+            try:
+                await last_el.evaluate("e => { const f = e.form; if (f) { f.requestSubmit ? f.requestSubmit() : f.submit() } }")
+            except Exception:
+                await last_el.press("Enter")
+            # wait for the frame to show something new
+            end = time.time() + timeout
+            await asyncio.sleep(0.25)
+            data = before
+            while time.time() < end:
+                await self._wait_content(page, seconds=max(0.5, end - time.time()))
+                data = await self._extract(page)
+                if data["text"] != before["text"]:
+                    break
+                await asyncio.sleep(0.2)
+            await asyncio.sleep(0.15)
+            data = await self._extract(page)
+            if SUSPENDED.search((data.get("title") or "") + " " + data["text"][:400]):
+                self.suspended(path)
+                return {"path": path, "error": SUSPENDED_ERR}
+            more = SHOWMORE.search(data["text"])
+            if more and _int(more.group(1)) < _int(more.group(2)) <= config.LIST_ROWS_LIMIT:
+                data = await self._show_more(page, path, data)
+            data["path"] = path + " [form " + ", ".join(f"{k}={v}" for k, v in fields.items()) + "]"
+            data["final_url"] = page.url
+            self.page_ok()
+            self.cache[key] = data
+            self.cache_t[key] = time.time()
+            print(f"[site] form {data['path']}: {len(data['text'])} chars, changed={data['text'] != before['text']}",
+                  flush=True)
+            self._dump(data)
+            return data
+        except Exception as e:
+            print(f"[site] form {path} failed: {e!r}"[:200], flush=True)
+            return {"path": path, "error": f"form failed: {e!r}"[:200]}
+        finally:
+            self.pages.put_nowait(page)
 
     # ---------- patient search ----------
     async def search_params(self):

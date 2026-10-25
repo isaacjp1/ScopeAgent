@@ -126,12 +126,6 @@ def _name_match(row_name, last, first):
     return ok
 
 
-def search_dead(site):
-    """The patient search found nobody for the first 5 distinct dates of birth (the startup probe's search evidence);
-    fake sites in tests never count as dead."""
-    return getattr(site, "search_hits", 1) == 0 and getattr(site, "search_misses", 0) >= 5
-
-
 async def find_patient(site, last_name=None, first_name=None, dob=None):
     """Search by date of birth (exact) and/or last name; return matching chart rows with flags."""
     tried, rows, notes = [], [], []
@@ -141,20 +135,6 @@ async def find_patient(site, last_name=None, first_name=None, dob=None):
     if d and sp.get("dob"):
         path = f"/patients?{sp['dob']}={d.isoformat()}"
         data = await site.read(path)
-        # DIAG-01 evidence: one hit or miss per distinct date-of-birth search, counted at the read. A task whose patient
-        # has no chart makes pick_patient search up to 5 more names with the same DOB; counted per call that would be
-        # six misses, so one odd task could fake a search failure on a clean clinic. Counting at the read also survives
-        # a wait_for that cancels the rest of this call. Fake sites in tests have no dob_searches and are not counted.
-        seen = getattr(site, "dob_searches", None)
-        if seen is not None and path not in seen:
-            seen.add(path)
-            if _patient_rows(data):
-                site.search_hits += 1
-            else:
-                site.search_misses += 1
-                if site.search_misses == 5 and search_dead(site):   # once: misses only grow
-                    print("[degraded] search: 5 date-of-birth searches found nobody; patients are now looked up "
-                          "through the documents and billing lists", flush=True)
         tried.append(path)
         if data.get("incomplete"):
             notes.append(f"{path}: {data['incomplete']}")
@@ -166,8 +146,16 @@ async def find_patient(site, last_name=None, first_name=None, dob=None):
                 notes.append("Patients born that day (names did not match exactly): " +
                              "; ".join(f"{o['name']} {o['dob']} {o['path']} {' '.join(o['flags'])}" for o in others[:10]))
     if not rows and last_name and last_key:
-        for ln in dict.fromkeys([last_name.strip(), fold(last_name).strip()]):
+        first_key = sp.get("first")
+        # one spelling only (v25 searched "Wells" and "wells": twice the load), plus the accent-free one if different;
+        # with the first name when the form has that field, so the list stays short (big lists got us suspended)
+        names = [last_name.strip()]
+        if fold(last_name).strip() != last_name.strip().lower():
+            names.append(fold(last_name).strip())
+        for ln in names:
             path = f"/patients?{last_key}={ln}"
+            if first_key and first_name:
+                path += f"&{first_key}={first_name.strip()}"
             data = await site.read(path)
             tried.append(path)
             if data.get("incomplete"):
@@ -213,10 +201,7 @@ async def find_patient_anywhere(site, last_name, dob=None, max_charts=6):
     out = []
     for data in await site.read_many(list(dict.fromkeys(charts))[:max_charts]):
         txt = data.get("text", "")
-        # practice titles read "Johnston, Linda · Wrenfield"; another version's title may not carry the name, then the
-        # chart heading "Last, First" (the first line of the chart text) does
-        title = data.get("title", "")
-        name = title.split("·")[0].strip() if "·" in title else next((ln.strip() for ln in txt.splitlines() if ln.strip()), "")
+        name = re.sub(r"\s*·.*$", "", data.get("title", "")).strip()
         m_dob = re.search(r"Date of birth\s*\n?\s*(\d{2}/\d{2}/\d{4})", txt)
         m_mrn = re.search(r"MRN\s*\n?\s*([A-Z]{1,4}\d{5,})", txt)
         if not name or not m_dob:

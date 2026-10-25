@@ -11,7 +11,7 @@ class Queue:
 
     async def current(self):
         for attempt in range(5):
-            status, data = await request("GET", f"{self.base}/item", timeout=20)
+            status, data = await request("GET", f"{self.base}/item", timeout=20, pool="queue")
             if status == 200:
                 return data
             await asyncio.sleep(0.3 * (attempt + 1))
@@ -21,7 +21,7 @@ class Queue:
         """field is exactly one of answer=..., skip=True, acknowledge=True. Returns the next state."""
         body = {"id": item_id, **field}
         for attempt in range(4):
-            status, data = await request("POST", f"{self.base}/item/close", body, timeout=20)
+            status, data = await request("POST", f"{self.base}/item/close", body, timeout=20, pool="queue")
             if status == 200:
                 return data
             if isinstance(data, dict) and "state" in data:  # 409 not_current / ended carry the state

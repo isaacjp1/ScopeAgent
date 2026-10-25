@@ -19,7 +19,6 @@ import os
 import random
 import re
 import threading
-import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
@@ -76,31 +75,31 @@ PROVIDERS.append(("pr7", "Elena Gutierrez, NP", "Family Medicine", True))
 
 LAST_CHART = ["cj1"]  # chart shown last (the mock vision model "reads" its phone)
 CALLS = []           # first 60 chars of every model request, for checking how many calls a run made
+_lock = threading.Lock()
 SESS = {}  # cookie sid -> {"loc": ..., "size": 5, "page": {key: n}}
-# MOCK_PATHS=renamed: another Wrenfield version whose section paths differ from the practice clinic's (ROB-02)
-RENAMED = {"/patients": "/people", "/schedule": "/calendar", "/billing": "/invoices",
-           "/documents": "/records"} if os.environ.get("MOCK_PATHS") == "renamed" else {}
-SERVED = []          # every content path asked for through /data, as the browser sent it
+# MOCK_SUSPEND="N,S": after N page loads every page shows "This account is suspended" for S seconds (then again)
+_n, _, _s = os.environ.get("MOCK_SUSPEND", "").partition(",")
+SUSP = {"n": int(_n or 0), "secs": float(_s or 0), "loads": 0, "until": 0.0, "events": 0}
+SUSPENDED_PAGE = ("<!doctype html><html><head><title>Wrenfield</title></head><body><h1>This account is suspended</h1>"
+                  "<p>You cannot use Wrenfield with this account at the moment. Try again later.</p></body></html>")
 
 
-def _at(p, prefix):
-    return p == prefix or p.startswith(prefix + "/") or p.startswith(prefix + "?")
-
-
-def practice_path(p):
-    """The path content() understands: under RENAMED a practice path is unknown, a renamed one maps back."""
-    if any(_at(p, a) for a in RENAMED):
-        return "/not-here" + p
-    for a, b in RENAMED.items():
-        if _at(p, b):
-            return a + p[len(b):]
-    return p
-
-
-def renamed_html(h):
-    for a, b in RENAMED.items():
-        h = h.replace(f'href="{a}', f'href="{b}')
-    return h
+def suspended_now(path):
+    """Suspension mode: True when this request gets the suspended page. Page loads (not frames, data, files) count."""
+    import time
+    if not SUSP["n"]:
+        return False
+    now = time.time()
+    with _lock:
+        if now < SUSP["until"]:
+            return True
+        if path.startswith(("/v/", "/data", "/files")):
+            return False
+        SUSP["loads"] += 1
+        if SUSP["loads"] > SUSP["n"]:
+            SUSP.update(loads=0, until=now + SUSP["secs"], events=SUSP["events"] + 1)
+            return True
+    return False
 
 
 def sess(h):
@@ -137,8 +136,8 @@ def shell(s):
     tok = "%x" % random.getrandbits(48)
     return f"""<!doctype html><html><head><title>Wrenfield</title><style>#menu{{display:none}} #menu.open{{display:block}}
 iframe{{width:1200px;height:900px;border:0}}</style></head><body>
-<a href="#main">Skip to main content</a><img src="http://blocked.example/x.png" alt="">
-<nav><a href="/">Dashboard</a> <a href="/patients">Patients</a> <a href="/schedule">Schedule</a> <a href="/billing">Billing</a> <a href="/documents">Documents</a></nav>
+<a href="#main">Skip to main content</a>
+<nav><a href="/">Dashboard</a> <a href="/patients">Patients</a> <a href="/schedule">Schedule</a> <a href="/documents">Documents</a></nav>
 <header><div role="button" aria-haspopup="true" onclick="document.getElementById('menu').classList.toggle('open')">
 <span>Location</span><br><span>{label}</span></div>
 <div id="menu"><div>Work at location</div>{opts}</div> Harbor Glen Medical Group · Wrenfield 4.2.0</header>
@@ -198,8 +197,6 @@ def content(s, path):
         last, dob = q.get("lastName", "").lower(), q.get("dob", "")
         if not last and not dob:
             return "<h1>Patients</h1><form><input name='lastName'><input name='dob' type='date'></form><p>Search to find a patient</p>"
-        if os.environ.get("MOCK_BREAK_SEARCH"):   # the search form is there, but no search finds anyone
-            return "<h1>Patients</h1><p>No patients match</p>"
         rows = []
         for p in sorted(P.values(), key=lambda x: (x["last"], x["first"])):
             if s["loc"] != "all" and p["loc"] != s["loc"]:
@@ -252,7 +249,7 @@ def content(s, path):
     m = re.match(r"^/documents(?:/(\w+))?$", u.path)
     if m:
         docs = [(p, d) for p in P.values() for d in p["docs"]]
-        rows = "".join(f'<tr><td>{d["received"]}</td><td>{d["type"]}</td><td>{d["title"]}</td><td><a href="/patients/{p["id"]}">{p["last"]}, {p["first"]}</a></td><td><a href="/documents/{d["id"]}">View</a></td></tr>' for p, d in docs)
+        rows = "".join(f'<tr><td>{d["received"]}</td><td>{d["type"]}</td><td>{d["title"]}</td><td>{p["last"]}, {p["first"]}</td><td><a href="/documents/{d["id"]}">View</a></td></tr>' for p, d in docs)
         viewer = ""
         if m.group(1):
             d = next(d for _, d in docs if d["id"] == m.group(1))
@@ -273,15 +270,8 @@ def content(s, path):
         ina = "".join(f'<option value="{x[0]}">{x[1]}</option>' for x in PROVIDERS if not x[3])
         return (f"<h1>Schedule</h1><h2>{pr[1]}</h2><p>{pr[2]} · Wednesday, October 14, 2026</p>"
                 f'<label>Provider</label><select name="provider"><optgroup label="Active">{act}</optgroup><optgroup label="Inactive">{ina}</optgroup></select>'
-                f"<p>Nothing scheduled on this day</p><p>{pr[1]} has no working hours or appointments on Wednesday, October 14, 2026.</p>")
+                "<p>Nothing scheduled on this day</p>")
     return "<p>This page is not available</p><p>The address may be mistyped, or the record was removed.</p>"
-
-
-LOGIN_FORM = ('<html><body><form method="post" action="/login"><input type="text" name="u">'
-              '<input type="password" name="pw"><button type="submit">Sign in</button></form></body></html>')
-# MOCK_LOGIN=two-step: the user name page first; POST /login/identify answers with the password form.
-LOGIN_STEP1 = ('<html><body><form method="post" action="/login/identify"><input type="email" name="email">'
-               '<button type="submit">Next</button></form></body></html>')
 
 
 class Site(BaseHTTPRequestHandler):
@@ -302,34 +292,31 @@ class Site(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path.startswith("/login"):
-            return self._send(200, LOGIN_STEP1 if os.environ.get("MOCK_LOGIN") == "two-step" else LOGIN_FORM)
+            return self._send(200, '<html><body><form method="post" action="/login"><input type="text" name="u">'
+                                   '<input type="password" name="pw"><button type="submit">Sign in</button></form></body></html>')
         s = sess(self)
         if not s:
             return self._send(302, "", headers={"Location": "/login"})
+        if suspended_now(self.path):
+            return self._send(200, SUSPENDED_PAGE)
         if self.path.startswith("/v/"):
             return self._send(200, FRAME)
         if self.path.startswith("/data"):
             p = unquote(parse_qs(urlparse(self.path).query)["p"][0])
-            SERVED.append(p)
-            return self._send(200, renamed_html(content(s, practice_path(p))))
+            return self._send(200, content(s, p))
         m = re.match(r"^/files/(\w+)\.(pdf|png)$", self.path)
         if m:
             d = next(d for p in P.values() for d in p["docs"] if d["id"] == m.group(1))
             if m.group(2) == "pdf":
                 return self._send(200, make_pdf(d["body"]), "application/pdf")
             return self._send(404, "")
-        return self._send(200, renamed_html(shell(s)))
+        return self._send(200, shell(s))
 
     def do_POST(self):
         n = int(self.headers.get("Content-Length") or 0)
         self.rfile.read(n)
         q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
-        if self.path.startswith("/login/identify"):
-            return self._send(200, LOGIN_FORM)
         if self.path.startswith("/login"):
-            time.sleep(float(os.environ.get("MOCK_SLOW_LOGIN") or 0))
-            if os.environ.get("MOCK_BREAK_LOGIN"):   # sign-in never works: the form again, no session
-                return self._send(200, LOGIN_FORM)
             sid = "%x" % random.getrandbits(40)
             SESS[sid] = {"loc": "Northgate", "size": 5, "page": {}}
             return self._send(302, "", headers={"Location": "/", "Set-Cookie": f"sid={sid}; Path=/"})
@@ -359,52 +346,8 @@ ITEMS = [
     {"id": "i006", "kind": "task", "text": "Referral letter received on 2025-09-16 for patient Gregory Porter (born 1976-04-08): what reason does it give for the referral?", "expected": "Chronic cough lasting more than eight weeks"},
     {"id": "i007", "kind": "task", "text": "Is Laura Torres (born 2001-02-20) new or established for Elena Gutierrez, NP on 2025-12-30?", "expected": "ESTABLISHED:2025-08-14"},
     {"id": "i008", "kind": "task", "text": "How many patients with the last name Jones can you see?", "expected": "x"},
-    {"id": "i009", "kind": "task", "text": "How many open slots are there for Logan Brown, MD at Northgate on 2026-10-14?", "expected": "0"},
 ]
-if os.environ.get("MOCK_LEARN"):   # REUSE-02: one more loop kind (label m1), learned as a stored program
-    ITEMS += [
-        {"id": "i010", "kind": "task", "text": "What is the MRN of patient Gregory Porter (born 1976-04-08)?", "expected": P["gp"]["mrn"]},
-        {"id": "i011", "kind": "task", "text": "What is the MRN of patient Judith Jackson (born 2004-11-12)?", "expected": P["jj"]["mrn"]},
-    ]
-# The fake model cannot write code, so it answers the learning prompt with this canned program: the scenario proves
-# the plumbing (learn, replay, confirm, run before the loop), not the model's programming.
-MRN_PROGRAM = """def step(task, pages, patients):
-    m = re.search(r"MRN of patient (\\w+) (\\w+) \\(born", task)
-    if not m:
-        return {"skip": "not an MRN request"}
-    want = (m.group(2) + ", " + m.group(1)).lower()
-    hits = [p for p in patients if p["name"].lower() == want]
-    if len(hits) != 1:
-        return {"skip": "%d charts match" % len(hits)}
-    path = hits[0]["path"]
-    if path not in pages:
-        return {"open": [path]}
-    v = re.search(r"MRN\\W*(HG\\d{7})", pages[path].get("text") or "")
-    return {"answer": v.group(1)} if v else {"skip": "no MRN on the chart"}
-"""
-QSTATE = {"i": 0, "log": [], "t0": None}
-
-
-def elapsed():
-    return time.time() - QSTATE["t0"] if QSTATE["t0"] else 0.0
-
-
-def queue_down():
-    """MOCK_QUEUE_ERRORS=a-b: the queue answers 500 while the shift clock reads between a and b seconds."""
-    w = os.environ.get("MOCK_QUEUE_ERRORS")
-    if not w or not QSTATE["t0"]:
-        return False
-    a, b = (float(x) for x in w.split("-"))
-    return a <= elapsed() <= b
-
-
-def cycled(i):
-    """The i-th item of a timed shift. MOCK_MESSAGES_ONCE=1: messages only in the first cycle. A resent rule starts a
-    new kind label (REUSE-01), so a scenario that follows one kind's record across cycles must not resend its rule."""
-    if os.environ.get("MOCK_MESSAGES_ONCE") and i >= len(ITEMS):
-        tasks = [x for x in ITEMS if x["kind"] == "task"]
-        return tasks[(i - len(ITEMS)) % len(tasks)]
-    return ITEMS[i % len(ITEMS)]
+QSTATE = {"i": 0, "log": []}
 
 
 class Q(BaseHTTPRequestHandler):
@@ -421,44 +364,28 @@ class Q(BaseHTTPRequestHandler):
 
     def state(self):
         i = QSTATE["i"]
-        shift = os.environ.get("MOCK_SHIFT")
-        if shift:   # a timed shift: items cycle with fresh ids until the clock (started by the first call) runs out
-            if QSTATE["t0"] is None:
-                QSTATE["t0"] = time.time()
-            left = float(shift) - elapsed()
-            if left <= 0:
-                return {"status": "ended", "reason": "time"}
-            it = cycled(i)
-            return {"status": "open", "seconds_left": round(left, 1),
-                    "item": {"id": f"{it['id']}-{i}", "kind": it["kind"], "text": it["text"]}}
         if i >= len(ITEMS):
             return {"status": "ended", "reason": "queue_finished"}
         return {"status": "open", "seconds_left": 600.0, "item": {k: ITEMS[i][k] for k in ("id", "kind", "text")}}
 
     def do_GET(self):
         if self.path == "/item":
-            if queue_down():
-                return self._json(500, {"error": {"code": "internal"}})
             return self._json(200, self.state())
         if self.path == "/calls":
             return self._json(200, CALLS)
         if self.path == "/log":
             return self._json(200, QSTATE["log"])
-        if self.path == "/served":
-            return self._json(200, SERVED)
         self._json(404, {"error": {"code": "not_found"}})
 
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)))
-        if queue_down():
-            return self._json(500, {"error": {"code": "internal"}})
         st = self.state()
         if st["status"] != "open":
             return self._json(409, {"error": {"code": "ended"}, "state": st})
         if body.get("id") != st["item"]["id"]:
             return self._json(409, {"error": {"code": "not_current"}, "state": st})
-        it = cycled(QSTATE["i"])
-        QSTATE["log"].append({**body, "expected": it.get("expected"), "t": round(elapsed(), 1)})
+        it = ITEMS[QSTATE["i"]]
+        QSTATE["log"].append({**body, "expected": it.get("expected")})
         QSTATE["i"] += 1
         self._json(200, self.state())
 
@@ -477,7 +404,6 @@ class L(BaseHTTPRequestHandler):
         self.wfile.write(b)
 
     def do_GET(self):
-        time.sleep(float(os.environ.get("MOCK_SLOW_MODELS") or 0))
         self._json(200, {"data": [{"id": "fake"}]})
 
     def do_POST(self):
@@ -490,16 +416,8 @@ class L(BaseHTTPRequestHandler):
                                     "usage": {"cost": 0.0005}})
 
         first = msgs[0]["content"]
-        if not isinstance(first, str):
-            # the document fast path sends its text prompt as a content list too; anything else is a chart screenshot
-            # whose phone the mock "reads" from the chart shown last
-            first = next((c.get("text", "") for c in first if c.get("type") == "text"), "")
-            if not first.startswith("Answer the question using ONLY the document"):
-                return say({"phone": P[LAST_CHART[0]]["phone"], "email": "", "address": ""})
-        if first.startswith("Write a Python program"):
-            return self._json(200, {"choices": [{"message": {"role": "assistant",
-                                                             "content": "```python\n" + MRN_PROGRAM + "```"}}],
-                                    "usage": {"cost": 0.0005}})
+        if not isinstance(first, str):   # screenshot of a chart: "read" the phone of the chart shown last
+            return say({"phone": P[LAST_CHART[0]]["phone"], "email": "", "address": ""})
         if first.startswith("The clinic messages below"):
             excl = re.search(r"never make a patient established: ([^.]+)\.", first).group(1).split(", ")
             return say({"years": 3, "counting_statuses": ["Completed"], "excluded_services": excl,
@@ -549,11 +467,6 @@ class L(BaseHTTPRequestHandler):
                 return call("read_document", {"path": d.group(1)})
             m = re.search(r"Reason for referral: ([^\n]+)", json.loads(last).get("text", ""))
             return call("submit_answer", {"answer": m.group(1).strip(), "confidence": 0.9}) if m else call("skip_task", {"reason": "no reason"})
-        if "MRN" in task:
-            if n == 0:
-                return call("open_pages", {"paths": paths[:1]})
-            v = re.search(r"MRN\W*(HG\d{7})", last)
-            return call("submit_answer", {"answer": v.group(1), "confidence": 0.95}) if v else call("skip_task", {"reason": "no MRN"})
         if "Jones" in task:
             if n == 0:
                 return call("open_pages", {"paths": ["/patients?lastName=Jones"]})
@@ -569,6 +482,7 @@ def serve(port, h):
 
 
 if __name__ == "__main__":
+    import time
     serve(8811, Site), serve(8812, Q), serve(8813, L)
     print("mock wrenfield up", flush=True)
     while True:

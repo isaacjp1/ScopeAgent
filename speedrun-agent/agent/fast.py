@@ -46,6 +46,7 @@ Reply with JSON only: {{"letter_text": <the full document text, transcribed exac
 NOT_NAMES = set("""what which who whom how is are was does did do when where why can could please patient patients
 referral letter lab report statement billing question phone number born dob date birth the for our we visit new
 established on in at of and with dr doctor md do np pa invoice balance""".split())
+DOC_ANSWER_TASK = re.compile(r"\breferral\b|\bwhat reason\b|\bwhich practice\b|\bwho (made|sent|wrote)\b", re.I)
 WHO_REFERRED = re.compile(r"which (practice|clinic|office|group|organi[sz]ation|facility)|who (made|sent|wrote|referred)|"
                           r"referred by|from which|what practice", re.I)
 
@@ -67,15 +68,19 @@ async def pick_patient(site, task, without=()):
     """The one chart born on the task's DOB whose first and last name both appear in the task. (row, dob) or (None, why)."""
     m = DOB_RE.search(task)
     dob = parse_any_date(m.group(1)) if m else None
+    found = (getattr(site, "found_cache", None) or {}).get(task)
+    if found:   # v40: the patient finder already resolved this task's patient (also without a date of birth)
+        if "Restricted" in found.get("flags", []):
+            return None, "restricted chart"
+        return found, dob
     if not dob:
         return None, "no date of birth"
     res = await clinic.find_patient(site, dob=dob.isoformat())
     if res.get("notes") and any("could be read" in n for n in res["notes"]):
         return None, "patient list incomplete"
-    if not getattr(site, "location_ok", True) or clinic.search_dead(site):
-        # The patient search shows only the working location's patients, or finds nobody at all: add charts found
-        # through the lists that cover every location, for each capitalized word of the task that could be the last name.
-        # limit: up to 6 words x 2 list reads per task in degraded mode; cache the lists per last name if a Set 1 log shows this eating the task cap
+    if not getattr(site, "location_ok", True):
+        # The patient search shows only the working location's patients: add charts found through the lists that
+        # cover every location, for each capitalized word of the task that could be the last name.
         seen = {r["path"] for r in res.get("matches", [])}
         words = [w for w in dict.fromkeys(re.findall(r"\b[A-Z][a-zA-Z'\u00C0-\u017F-]{1,}\b", task))
                  if w.lower() not in NOT_NAMES]
@@ -97,6 +102,8 @@ async def pick_patient(site, task, without=()):
                 out.append(r)
         return out
     rows = named(res.get("matches", []))
+    if not rows and getattr(site, "found_cache", None) is not None:
+        return None, "no chart with the task's names born that day"   # v40: the finder already searched by name
     if not rows:
         # the search by date of birth found no chart with the task's names (or the clinic's search has no DOB
         # field): search each word that could be the last name, keeping charts born on the task's date
@@ -120,21 +127,6 @@ async def pick_patient(site, task, without=()):
     return {**active[0], "paths": list(dict.fromkeys([active[0]["path"]] + [r["path"] for r in merged]))}, dob
 
 
-def kind_of(task):
-    """Name of the deterministic path that takes this task, "" for none; also the label of the per-kind summary."""
-    from . import solvers   # Set 1 kinds (appointment counts, open slots, filing deadlines, claim next step); circular
-    for match, solve in solvers.KINDS:
-        if match.search(task):
-            return solve.__name__
-    if NE_TASK.search(task):
-        return "new_established"
-    if PHONE_TASK.search(task) and not PHONE_OTHER.search(task):
-        return "phone"
-    if DOC_TASK.search(task):
-        return "document"
-    return ""
-
-
 def no(why):
     print(f"[fast] fallback to the model loop: {why}", flush=True)
     return None
@@ -144,15 +136,27 @@ class Fast:
     def __init__(self, site, llm, rules):
         self.site, self.llm, self.rules = site, llm, rules
 
+    def matches(self, task):
+        """True if a deterministic path applies to this task's wording."""
+        from . import solvers
+        return (any(m.search(task) for m, _ in solvers.KINDS) or bool(NE_TASK.search(task))
+                or bool(PHONE_TASK.search(task) and not PHONE_OTHER.search(task))
+                or bool(DOC_TASK.search(task) and DOC_ANSWER_TASK.search(task)))
+
     async def solve(self, task):
-        from . import solvers   # circular import, as in kind_of
-        label = kind_of(task)   # the dispatch order lives in kind_of only
-        if not label:
-            return None
-        for _, solve in solvers.KINDS:
-            if solve.__name__ == label:
+        from . import solvers   # Set 1 kinds (appointment counts, open slots, filing deadlines, claim next step)
+        for match, solve in solvers.KINDS:
+            if match.search(task):
                 return await solve(self, task)
-        return await getattr(self, label)(task)   # new_established, phone, document
+        if NE_TASK.search(task):
+            return await self.new_established(task)
+        if PHONE_TASK.search(task) and not PHONE_OTHER.search(task):
+            return await self.phone(task)
+        if DOC_TASK.search(task) and DOC_ANSWER_TASK.search(task):
+            # only questions answered by a document's own words (referral source / reason): a lab triage
+            # answer is never in the report, so that path only cost time (v29)
+            return await self.document(task)
+        return None
 
     async def new_established(self, task):
         rule = await self.rules.ne_rule()
@@ -237,7 +241,7 @@ class Fast:
             return no("document reply cut off")
         out = parse_json(msg.get("content")) or {}
         ans = out.get("answer")
-        if not isinstance(ans, str) or not ans.strip() or float(out.get("confidence") or 0) < 0.8:
+        if not isinstance(ans, str) or not ans.strip() or float(out.get("confidence") or 0) < 0.6:
             return no(f"no confident answer in the document: {out}"[:200])
         ans = ans.strip().strip('"').strip()
         source = text or str(out.get("letter_text") or "")
