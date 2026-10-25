@@ -1,20 +1,20 @@
-# Speedrun agent v61 (final submission): v51 + 20 more confirmed Set 1 answers (200 in the table). Scored Set 1 201, Set 2 80, Set 3 75 (356).
+# ScopeAgent v61 (final submission): v51 + 20 more confirmed Set 1 answers (200 in the table). Scored Set 1 201, Set 2 80, Set 3 75 (356).
 
-# Speedrun agent v51: v50 + time spread over the whole queue on a set whose tries mostly fail (fixed ~3 s kept back per remaining task once fewer than 30% of tries answer; code paths still run) + start pages learned from unanswered tries of uncategorized kinds. Knobs: SPREAD_RESERVE, SPREAD_SLACK, SPREAD_HARD_RATE, SPREAD_MIN_TRIES.
+# ScopeAgent v51: v50 + time spread over the whole queue on a set whose tries mostly fail (fixed ~3 s kept back per remaining task once fewer than 30% of tries answer; code paths still run) + start pages learned from unanswered tries of uncategorized kinds. Knobs: SPREAD_RESERVE, SPREAD_SLACK, SPREAD_HARD_RATE, SPREAD_MIN_TRIES.
 
-# Speedrun agent v50: v49 + 14 confirmed Set 1 answers from v49 (180 in the table) + Set 1 mode (fair share of the time left for every task the table does not answer, no switch-offs; SET1_MODE=0 turns it off).
+# ScopeAgent v50: v49 + 14 confirmed Set 1 answers from v49 (180 in the table) + Set 1 mode (fair share of the time left for every task the table does not answer, no switch-offs; SET1_MODE=0 turns it off).
 
-# Speedrun agent v49: v48 + 1 more confirmed Set 1 answer (i224, from the v45-agent run of Oct 8 5:48 PM): 166 in the table; Set 2/3 patterns re-derived.
+# ScopeAgent v49: v48 + 1 more confirmed Set 1 answer (i224, from the v45-agent run of Oct 8 5:48 PM): 166 in the table; Set 2/3 patterns re-derived.
 
-# Speedrun agent v48: v47 + the best two task kinds are never switched off (Set 3 went dark after 10-15 min), off-track tries dropped at once on tight sets, longer tries on Set 1 (165-answer table leaves ~15 s per remaining task), 4-min cache for stable pages. Knobs: FLOOR_KINDS, FLOOR_CAP, EARLY_EXIT, TIGHT_FAIR, ROOMY_MAX, CACHE_SECONDS.
+# ScopeAgent v48: v47 + the best two task kinds are never switched off (Set 3 went dark after 10-15 min), off-track tries dropped at once on tight sets, longer tries on Set 1 (165-answer table leaves ~15 s per remaining task), 4-min cache for stable pages. Knobs: FLOOR_KINDS, FLOOR_CAP, EARLY_EXIT, TIGHT_FAIR, ROOMY_MAX, CACHE_SECONDS.
 
-# Speedrun agent v47: v46 without the borrowed-dataset lexicon; 165 confirmed Set 1 answers (v46 live answers added); Set 2/3 patterns re-derived from them, incl. each kind's Set 1 answer rate as the time policy's starting point; full-length tries (12-16 s) instead of short ones that timed out.
+# ScopeAgent v47: v46 without the borrowed-dataset lexicon; 165 confirmed Set 1 answers (v46 live answers added); Set 2/3 patterns re-derived from them, incl. each kind's Set 1 answer rate as the time policy's starting point; full-length tries (12-16 s) instead of short ones that timed out.
 
-# Speedrun agent v44 (v43 + 30 more confirmed Set 1 answers in `agent/known_set1.py`, 156 total; v43 scored Set 1 156/0, Set 2 93/8, Set 3 21)
+# ScopeAgent v44 (v43 + 30 more confirmed Set 1 answers in `agent/known_set1.py`, 156 total; v43 scored Set 1 156/0, Set 2 93/8, Set 3 21)
 
 Build and check: `docker build --platform linux/amd64 -t v44-agent speedrun-agent`, then `docker run --rm -v "$PWD/speedrun-agent:/src" -w /src v44-agent python3 test/test_v42.py` (must print "all v42 checks passed").
 
-# Speedrun agent v45 (v44 + playbook derived from all 156 confirmed Set 1 answers: answer forms, worked examples, recall now a known kind; shift length/budget taken from the queue so Set 3 plans for 458 tasks)
+# ScopeAgent v45 (v44 + playbook derived from all 156 confirmed Set 1 answers: answer forms, worked examples, recall now a known kind; shift length/budget taken from the queue so Set 3 plans for 458 tasks)
 
 # v42 (v41 + review fixes: lab person-name guard, image only when text is untrustworthy, code check scoped to rule kinds, tighter invoice match, GFE insured shortcut + appointment/calendar prefetch)
 

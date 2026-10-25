@@ -1,4 +1,4 @@
-"""Speedrun agent v41: works the queue until the shift ends.
+"""ScopeAgent v41: works the queue until the shift ends.
 
 v41: a task's kind is first its playbook CATEGORY (agent/playbook.py: Set 1's wordings, pages, procedures and worked
 examples, applied to every set); the kinds Set 1 answered live start in replay mode, with their pages pre-opened.

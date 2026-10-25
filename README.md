@@ -1,6 +1,6 @@
-# ScopeRIZ Speedrun Agent
+# ScopeAgent
 
-An autonomous agent built for the **Scope Health Speedrun** (Oct 5–9, 2026). The agent works one shift of a medical
+ScopeAgent is an autonomous agent built for the **Scope Health Speedrun** (Oct 5–9, 2026). The agent works one shift of a medical
 clinic's back-office queue inside **Wrenfield**, a web-based records system (patients, charts, schedule, billing,
 documents). It reads the clinic's rules as they arrive, then answers hundreds of questions against live records under
 a hard time limit and a model budget of a few dollars.
@@ -130,18 +130,18 @@ speedrun-kit/             Organizer kit: `arena` CLI, docs, TypeScript reference
 
 ```bash
 # build for the judge (linux/amd64 only)
-docker build --platform linux/amd64 -t speedrun-agent speedrun-agent
+docker build --platform linux/amd64 -t scopeagent speedrun-agent
 
 # offline checks: no browser session, no network (each prints "all ... checks passed")
-docker run --rm -v "$PWD/speedrun-agent:/src" -w /src speedrun-agent python3 test/test_v51.py
-docker run --rm -v "$PWD/speedrun-agent:/src" -w /src speedrun-agent python3 test/test_set1_known.py
+docker run --rm -v "$PWD/speedrun-agent:/src" -w /src scopeagent python3 test/test_v51.py
+docker run --rm -v "$PWD/speedrun-agent:/src" -w /src scopeagent python3 test/test_set1_known.py
 
 # time-policy simulation for a 30-minute, 458-task shift
-docker run --rm -v "$PWD/speedrun-agent:/src" -w /src speedrun-agent python3 test/sim_policy.py 1800 458
+docker run --rm -v "$PWD/speedrun-agent:/src" -w /src scopeagent python3 test/sim_policy.py 1800 458
 
 # practice run and submission with the organizer CLI (see speedrun-kit/)
-arena test --set practice --agent speedrun-agent
-arena push speedrun-agent
+arena test --set practice --agent scopeagent
+arena push scopeagent
 arena submit --image <id> --wait
 ```
 
